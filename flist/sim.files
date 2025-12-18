@@ -1,0 +1,11 @@
+#/home/u/altera/13.1/quartus/eda/sim_lib/altera_mf.v
+#/mnt/c/intelFPGA_lite/19.1/quartus/eda/sim_lib/altera_mf.v
+
+#+incdir+../../rtl/c7bicu
+#+incdir+../../rtl/c7bbiu
+
+../altera_mf.v
+
+../../rtl/lib/swrvr_clib.v \
+../../rtl/lib/swrvr_dlib.v \
+../../rtl/c7blsu.v 
