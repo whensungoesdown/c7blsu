@@ -30,7 +30,7 @@ add wave -recursive -depth 10 *
 #
 #add wave -position end  sim:/top_tb/u_top/u_cpu/cpu/exu/registers/regs
 
-run 1000ns
+run 10000ns
 
 # read in stimulus
 #do stim.do

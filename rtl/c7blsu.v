@@ -28,8 +28,8 @@ module c7blsu(
    input  [31:0]                      ecl_lsu_base_e,
    input  [31:0]                      ecl_lsu_offset_e,
    input  [31:0]                      ecl_lsu_wdata_e,
-   input  [4:0]                       ecl_lsu_rd_e,
-   input                              ecl_lsu_wen_e,
+//   input  [4:0]                       ecl_lsu_rd_e,
+//   input                              ecl_lsu_wen_e,
 
    output                             lsu_ecl_data_valid_ls3,
    output [31:0]                      lsu_ecl_data_ls3,
@@ -230,7 +230,7 @@ module c7blsu(
 
    assign lsu_biu_rd_req = biu_rd_req_in;
 
-   assign lsu_biu_rd_addr = lsu_addr_ls2;
+   assign lsu_biu_rd_addr = {lsu_addr_ls2[31:3], 3'b000}; // 64-bit align
 
    //
    // BIU write request 
@@ -256,7 +256,7 @@ module c7blsu(
 
    assign lsu_biu_wr_req_ls2 = biu_wr_req_in;
 
-   assign lsu_biu_wr_addr_ls2 = lsu_addr_ls2;
+   assign lsu_biu_wr_addr_ls2 = {lsu_addr_ls2[31:3], 3'b000}; // 64-bit align
 
 
 
@@ -383,19 +383,19 @@ module c7blsu(
    // the rd field for loads.
    // Instead, because the in-order core will stall on a load instruction, the
    // rd information must be preserved within the EXU.
-   dffe_s #(5) ecl_lsu_rd_ls1_reg (
-      .din (ecl_lsu_rd_e),
-      .en  (ecl_lsu_valid_e),
-      .clk (clk),
-      .q   (lsu_rd_ls1),
-      .se(), .si(), .so());
+   //dffe_s #(5) ecl_lsu_rd_ls1_reg (
+   //   .din (ecl_lsu_rd_e),
+   //   .en  (ecl_lsu_valid_e),
+   //   .clk (clk),
+   //   .q   (lsu_rd_ls1),
+   //   .se(), .si(), .so());
 
-   dffe_s #(1) ecl_lsu_wen_ls1_reg (
-      .din (ecl_lsu_wen_e),
-      .en  (ecl_lsu_valid_e),
-      .clk (clk),
-      .q   (lsu_wen_ls1),
-      .se(), .si(), .so());
+   //dffe_s #(1) ecl_lsu_wen_ls1_reg (
+   //   .din (ecl_lsu_wen_e),
+   //   .en  (ecl_lsu_valid_e),
+   //   .clk (clk),
+   //   .q   (lsu_wen_ls1),
+   //   .se(), .si(), .so());
 
    // The LSU pipeline begins when ecl_lsu_valid_e is asserted, and the core
    // remains stalled until the LSU returns a result.
@@ -461,4 +461,5 @@ module c7blsu(
    // Unimplmented signals
    assign lsu_ecl_except_buserr_ls3 = 1'b0;
    assign lsu_ecl_except_ecc_ls3 = 1'b0;
+
 endmodule
