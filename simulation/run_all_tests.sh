@@ -2,8 +2,8 @@
 echo run tests
 echo
 
-cd test0_simplehit
-echo "test0_simplehit"
+cd test1_store
+echo "test1_store"
 if ./simulate.sh | grep PASS; then
 	printf ""
 else
@@ -14,8 +14,8 @@ echo ""
 cd ..
 
 
-cd test1_miss_lfb
-echo "test1_miss_lfb"
+cd test2_load
+echo "test2_load"
 if ./simulate.sh | grep PASS; then
 	printf ""
 else
@@ -26,13 +26,3 @@ echo ""
 cd ..
 
 
-cd test2_miss_allocate
-echo "test2_miss_allocate"
-if ./simulate.sh | grep PASS; then
-	printf ""
-else
-	printf "Fail!\n"
-	exit
-fi
-echo ""
-cd ..

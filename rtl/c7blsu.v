@@ -285,7 +285,7 @@ module c7blsu(
    assign lsu_align_mode_ls1[4] = !(lsu_scw || lsu_scd) && (lsu_lbu||lsu_lhu||lsu_lwu);
 
 
-   wire [31:0] lsu_align_res_m = 
+   wire [31:0] lsu_align_res_ls3 = 
 	   ({32{lsu_shift_ls3[1:0] == 2'b00 && !lsu_align_mode_ls3[4] && lsu_align_mode_ls3[3]}} & {{24{data_rdata_input_ls3[ 7]}},data_rdata_input_ls3[ 7: 0]}) | // ld.b
 	   ({32{lsu_shift_ls3[1:0] == 2'b01 && !lsu_align_mode_ls3[4] && lsu_align_mode_ls3[3]}} & {{24{data_rdata_input_ls3[15]}},data_rdata_input_ls3[15: 8]}) |
 	   ({32{lsu_shift_ls3[1:0] == 2'b10 && !lsu_align_mode_ls3[4] && lsu_align_mode_ls3[3]}} & {{24{data_rdata_input_ls3[23]}},data_rdata_input_ls3[23:16]}) |
@@ -303,7 +303,7 @@ module c7blsu(
 	   //({32{!lsu_align_mode_ls3[4] && !lsu_align_mode_ls3[3] && !lsu_align_mode_ls3[2] && !lsu_align_mode_ls3[1]}} & {31'd0,data_scsucceed}) ; // data_scsucceed = 1'b1
 	   ({32{!lsu_align_mode_ls3[4] && !lsu_align_mode_ls3[3] && !lsu_align_mode_ls3[2] && !lsu_align_mode_ls3[1]}} & {31'd0, 1'b1}) ; // data_scsucceed = 1'b1
 
-   assign lsu_ecl_data_ls3 = lsu_align_res_m;
+   assign lsu_ecl_data_ls3 = lsu_align_res_ls3;
    assign lsu_ecl_data_valid_ls3 = biu_lsu_data_valid_ls3;
 
 

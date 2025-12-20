@@ -2,25 +2,17 @@
 echo clean tests
 echo
 
-cd test0_simplehit
-echo "test0_simplehit"
+cd test1_store
+echo "test1_store"
 ./clean.sh
 echo ""
 cd ..
 
 
-cd test1_miss_lfb
-echo "test1_miss_lfb"
+cd test2_load
+echo "test2_load"
 ./clean.sh
 echo ""
 cd ..
-
-
-cd test2_miss_allocate
-echo "test1_miss_allocate"
-./clean.sh
-echo ""
-cd ..
-
 
 

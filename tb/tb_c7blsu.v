@@ -12,8 +12,8 @@ reg [6:0] ecl_lsu_op_e;
 reg [31:0] ecl_lsu_base_e;
 reg [31:0] ecl_lsu_offset_e;
 reg [31:0] ecl_lsu_wdata_e;
-reg [4:0] ecl_lsu_rd_e;
-reg ecl_lsu_wen_e;
+//reg [4:0] ecl_lsu_rd_e;
+//reg ecl_lsu_wen_e;
 
 wire lsu_ecl_data_valid_ls3;
 wire [31:0] lsu_ecl_data_ls3;
@@ -48,8 +48,8 @@ c7blsu uut (
     .ecl_lsu_base_e(ecl_lsu_base_e),
     .ecl_lsu_offset_e(ecl_lsu_offset_e),
     .ecl_lsu_wdata_e(ecl_lsu_wdata_e),
-    .ecl_lsu_rd_e(ecl_lsu_rd_e),
-    .ecl_lsu_wen_e(ecl_lsu_wen_e),
+    //.ecl_lsu_rd_e(ecl_lsu_rd_e),
+    //.ecl_lsu_wen_e(ecl_lsu_wen_e),
 
     .lsu_ecl_data_valid_ls3(lsu_ecl_data_valid_ls3),
     .lsu_ecl_data_ls3(lsu_ecl_data_ls3),
@@ -87,8 +87,8 @@ initial begin
     ecl_lsu_base_e = 0;
     ecl_lsu_offset_e = 0;
     ecl_lsu_wdata_e = 0;
-    ecl_lsu_rd_e = 0;
-    ecl_lsu_wen_e = 0;
+    //ecl_lsu_rd_e = 0;
+    //ecl_lsu_wen_e = 0;
 
     biu_lsu_rd_ack_ls2 = 0;
     biu_lsu_data_valid_ls3 = 0;
@@ -108,8 +108,8 @@ initial begin
     ecl_lsu_op_e = `LLSU_LD_W; // 假设 decode.vh 中有定义
     ecl_lsu_base_e = 32'h1000;
     ecl_lsu_offset_e = 32'h4;
-    ecl_lsu_wen_e = 1;
-    ecl_lsu_rd_e = 5'h5;
+    //ecl_lsu_wen_e = 1;
+    //ecl_lsu_rd_e = 5'h5;
 
     @(posedge clk);
     @(posedge clk);
@@ -136,7 +136,7 @@ initial begin
     ecl_lsu_base_e = 32'h2000;
     ecl_lsu_offset_e = 32'h2;
     ecl_lsu_wdata_e = 32'hAA;
-    ecl_lsu_wen_e = 0;
+    //ecl_lsu_wen_e = 0;
 
     @(posedge clk);
     @(posedge clk);
