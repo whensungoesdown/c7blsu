@@ -87,6 +87,10 @@ integer error_count;
 
 integer ale_exception;
 
+// Test summary variables
+integer test_passed;
+integer test_failed;
+
 // Initialization
 initial begin
     clk = 0;
@@ -110,6 +114,8 @@ initial begin
     
     test_count = 0;
     error_count = 0;
+    test_passed = 0;
+    test_failed = 0;
 
     ale_exception = 0;
     
@@ -140,37 +146,38 @@ initial begin
     $display("\n========================================");
     $display("Test Complete");
     $display("Total Tests Executed: %0d", test_count);
-    $display("Error Count: %0d", error_count);
-    if (error_count == 0) begin
-	    $display("All Tests Passed!\n");
-	    $display("\nPASS!\n");
-	    $display("\033[0;32m");
-	    $display("**************************************************");
-	    $display("*                                                *");
-	    $display("*      * * *       *        * * *     * * *      *");
-	    $display("*      *    *     * *      *         *           *");
-	    $display("*      * * *     *   *      * * *     * * *      *");
-	    $display("*      *        * * * *          *         *     *");
-	    $display("*      *       *       *    * * *     * * *      *");
-	    $display("*                                                *");
-	    $display("**************************************************");
-	    $display("\n");
-	    $display("\033[0m");
+    $display("Tests Passed: %0d", test_passed);
+    $display("Tests Failed: %0d", test_failed);
+    if (test_failed == 0) begin
+        $display("All Tests Passed!\n");
+        $display("\nPASS!\n");
+        $display("\033[0;32m");
+        $display("**************************************************");
+        $display("*                                                *");
+        $display("*      * * *       *        * * *     * * *      *");
+        $display("*      *    *     * *      *         *           *");
+        $display("*      * * *     *   *      * * *     * * *      *");
+        $display("*      *        * * * *          *         *     *");
+        $display("*      *       *       *    * * *     * * *      *");
+        $display("*                                                *");
+        $display("**************************************************");
+        $display("\n");
+        $display("\033[0m");
     end else begin
-	    $display("Some Tests Failed!\n");
-	    $display("\nFAIL!\n");
-	    $display("\033[0;31m");
-	    $display("**************************************************");
-	    $display("*                                                *");
-	    $display("*      * * *       *         ***      *          *");
-	    $display("*      *          * *         *       *          *");
-	    $display("*      * * *     *   *        *       *          *");
-	    $display("*      *        * * * *       *       *          *");
-	    $display("*      *       *       *     ***      * * *      *");
-	    $display("*                                                *");
-	    $display("**************************************************");
-	    $display("\n");
-	    $display("\033[0m");
+        $display("Some Tests Failed!\n");
+        $display("\nFAIL!\n");
+        $display("\033[0;31m");
+        $display("**************************************************");
+        $display("*                                                *");
+        $display("*      * * *       *         ***      *          *");
+        $display("*      *          * *         *       *          *");
+        $display("*      * * *     *   *        *       *          *");
+        $display("*      *        * * * *       *       *          *");
+        $display("*      *       *       *     ***      * * *      *");
+        $display("*                                                *");
+        $display("**************************************************");
+        $display("\n");
+        $display("\033[0m");
     end
     $display("========================================\n");
 
@@ -221,8 +228,10 @@ endtask
 task test_byte_position_0;
     reg [31:0] test_addr;
     reg [7:0]  test_data;
+    integer local_error;
     
     begin
+        local_error = 0;
         test_count = test_count + 1;
         test_addr = 32'h1000;
         test_data = 8'hA0;
@@ -253,20 +262,29 @@ task test_byte_position_0;
         // Expected wstrb for position 0
         expected_strb = 8'b00000001;
         
-        verify_wstrb_and_check_data(test_data, 0);
+        local_error = verify_wstrb_and_check_data(test_data, 0);
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         verify_wstrb_data_combination(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response();
         
-        $display("  [Test %0d] Completed", test_count);
+        // Display test result
+        if (local_error == 0) begin
+            $display("  [Test %0d] PASS", test_count);
+            test_passed = test_passed + 1;
+        end else begin
+            $display("  [Test %0d] FAIL", test_count);
+            test_failed = test_failed + 1;
+        end
     end
 endtask
 
 task test_byte_position_1;
     reg [31:0] test_addr;
     reg [7:0]  test_data;
+    integer local_error;
     
     begin
+        local_error = 0;
         test_count = test_count + 1;
         test_addr = 32'h1001;
         test_data = 8'hA1;
@@ -297,20 +315,29 @@ task test_byte_position_1;
         // Expected wstrb for position 1
         expected_strb = 8'b00000010;
         
-        verify_wstrb_and_check_data(test_data, 1);
+        local_error = verify_wstrb_and_check_data(test_data, 1);
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         verify_wstrb_data_combination(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response();
         
-        $display("  [Test %0d] Completed", test_count);
+        // Display test result
+        if (local_error == 0) begin
+            $display("  [Test %0d] PASS", test_count);
+            test_passed = test_passed + 1;
+        end else begin
+            $display("  [Test %0d] FAIL", test_count);
+            test_failed = test_failed + 1;
+        end
     end
 endtask
 
 task test_byte_position_2;
     reg [31:0] test_addr;
     reg [7:0]  test_data;
+    integer local_error;
     
     begin
+        local_error = 0;
         test_count = test_count + 1;
         test_addr = 32'h1002;
         test_data = 8'hA2;
@@ -341,20 +368,29 @@ task test_byte_position_2;
         // Expected wstrb for position 2
         expected_strb = 8'b00000100;
         
-        verify_wstrb_and_check_data(test_data, 2);
+        local_error = verify_wstrb_and_check_data(test_data, 2);
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         verify_wstrb_data_combination(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response();
         
-        $display("  [Test %0d] Completed", test_count);
+        // Display test result
+        if (local_error == 0) begin
+            $display("  [Test %0d] PASS", test_count);
+            test_passed = test_passed + 1;
+        end else begin
+            $display("  [Test %0d] FAIL", test_count);
+            test_failed = test_failed + 1;
+        end
     end
 endtask
 
 task test_byte_position_3;
     reg [31:0] test_addr;
     reg [7:0]  test_data;
+    integer local_error;
     
     begin
+        local_error = 0;
         test_count = test_count + 1;
         test_addr = 32'h1003;
         test_data = 8'hA3;
@@ -385,20 +421,29 @@ task test_byte_position_3;
         // Expected wstrb for position 3
         expected_strb = 8'b00001000;
         
-        verify_wstrb_and_check_data(test_data, 3);
+        local_error = verify_wstrb_and_check_data(test_data, 3);
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         verify_wstrb_data_combination(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response();
         
-        $display("  [Test %0d] Completed", test_count);
+        // Display test result
+        if (local_error == 0) begin
+            $display("  [Test %0d] PASS", test_count);
+            test_passed = test_passed + 1;
+        end else begin
+            $display("  [Test %0d] FAIL", test_count);
+            test_failed = test_failed + 1;
+        end
     end
 endtask
 
 task test_byte_position_4;
     reg [31:0] test_addr;
     reg [7:0]  test_data;
+    integer local_error;
     
     begin
+        local_error = 0;
         test_count = test_count + 1;
         test_addr = 32'h1004;
         test_data = 8'hA4;
@@ -429,20 +474,29 @@ task test_byte_position_4;
         // Expected wstrb for position 4
         expected_strb = 8'b00010000;
         
-        verify_wstrb_and_check_data(test_data, 4);
+        local_error = verify_wstrb_and_check_data(test_data, 4);
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         verify_wstrb_data_combination(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response();
         
-        $display("  [Test %0d] Completed", test_count);
+        // Display test result
+        if (local_error == 0) begin
+            $display("  [Test %0d] PASS", test_count);
+            test_passed = test_passed + 1;
+        end else begin
+            $display("  [Test %0d] FAIL", test_count);
+            test_failed = test_failed + 1;
+        end
     end
 endtask
 
 task test_byte_position_5;
     reg [31:0] test_addr;
     reg [7:0]  test_data;
+    integer local_error;
     
     begin
+        local_error = 0;
         test_count = test_count + 1;
         test_addr = 32'h1005;
         test_data = 8'hA5;
@@ -473,20 +527,29 @@ task test_byte_position_5;
         // Expected wstrb for position 5
         expected_strb = 8'b00100000;
         
-        verify_wstrb_and_check_data(test_data, 5);
+        local_error = verify_wstrb_and_check_data(test_data, 5);
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         verify_wstrb_data_combination(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response();
         
-        $display("  [Test %0d] Completed", test_count);
+        // Display test result
+        if (local_error == 0) begin
+            $display("  [Test %0d] PASS", test_count);
+            test_passed = test_passed + 1;
+        end else begin
+            $display("  [Test %0d] FAIL", test_count);
+            test_failed = test_failed + 1;
+        end
     end
 endtask
 
 task test_byte_position_6;
     reg [31:0] test_addr;
     reg [7:0]  test_data;
+    integer local_error;
     
     begin
+        local_error = 0;
         test_count = test_count + 1;
         test_addr = 32'h1006;
         test_data = 8'hA6;
@@ -517,20 +580,29 @@ task test_byte_position_6;
         // Expected wstrb for position 6
         expected_strb = 8'b01000000;
         
-        verify_wstrb_and_check_data(test_data, 6);
+        local_error = verify_wstrb_and_check_data(test_data, 6);
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         verify_wstrb_data_combination(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response();
         
-        $display("  [Test %0d] Completed", test_count);
+        // Display test result
+        if (local_error == 0) begin
+            $display("  [Test %0d] PASS", test_count);
+            test_passed = test_passed + 1;
+        end else begin
+            $display("  [Test %0d] FAIL", test_count);
+            test_failed = test_failed + 1;
+        end
     end
 endtask
 
 task test_byte_position_7;
     reg [31:0] test_addr;
     reg [7:0]  test_data;
+    integer local_error;
     
     begin
+        local_error = 0;
         test_count = test_count + 1;
         test_addr = 32'h1007;
         test_data = 8'hA7;
@@ -561,12 +633,19 @@ task test_byte_position_7;
         // Expected wstrb for position 7
         expected_strb = 8'b10000000;
         
-        verify_wstrb_and_check_data(test_data, 7);
+        local_error = verify_wstrb_and_check_data(test_data, 7);
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         verify_wstrb_data_combination(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response();
         
-        $display("  [Test %0d] Completed", test_count);
+        // Display test result
+        if (local_error == 0) begin
+            $display("  [Test %0d] PASS", test_count);
+            test_passed = test_passed + 1;
+        end else begin
+            $display("  [Test %0d] FAIL", test_count);
+            test_failed = test_failed + 1;
+        end
     end
 endtask
 
@@ -599,8 +678,10 @@ endtask
 task test_sb_unaligned_example;
     reg [31:0] test_addr;
     reg [31:0] test_wdata;
+    integer local_error;
     
     begin
+        local_error = 0;
         test_count = test_count + 1;
         test_addr = 32'h3003;
         test_wdata = 32'h00000077;
@@ -633,22 +714,31 @@ task test_sb_unaligned_example;
         
         if (lsu_biu_wr_strb_ls2 !== expected_strb) begin
             $display("  ERROR: WSTRB mismatch!");
-            error_count = error_count + 1;
+            local_error = 1;
         end
         
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         verify_wstrb_data_combination(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response();
         
-        $display("  [Test %0d] Completed", test_count);
+        // Display test result
+        if (local_error == 0) begin
+            $display("  [Test %0d] PASS", test_count);
+            test_passed = test_passed + 1;
+        end else begin
+            $display("  [Test %0d] FAIL", test_count);
+            test_failed = test_failed + 1;
+        end
     end
 endtask
 
 task test_sh_unaligned_example;
     reg [31:0] test_addr;
     reg [31:0] test_wdata;
+    integer local_error;
     
     begin
+        local_error = 0;
         test_count = test_count + 1;
         test_addr = 32'h3002;
         test_wdata = 32'h00000077;
@@ -681,22 +771,31 @@ task test_sh_unaligned_example;
         
         if (lsu_biu_wr_strb_ls2 !== expected_strb) begin
             $display("  ERROR: WSTRB mismatch!");
-            error_count = error_count + 1;
+            local_error = 1;
         end
         
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         verify_wstrb_data_combination(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response();
         
-        $display("  [Test %0d] Completed", test_count);
+        // Display test result
+        if (local_error == 0) begin
+            $display("  [Test %0d] PASS", test_count);
+            test_passed = test_passed + 1;
+        end else begin
+            $display("  [Test %0d] FAIL", test_count);
+            test_failed = test_failed + 1;
+        end
     end
 endtask
 
 task test_sw_unaligned_example;
     reg [31:0] test_addr;
     reg [31:0] test_wdata;
+    integer local_error;
     
     begin
+        local_error = 0;
         test_count = test_count + 1;
         test_addr = 32'h3001;
         test_wdata = 32'h00000077;
@@ -724,26 +823,22 @@ task test_sw_unaligned_example;
         
         expected_strb = 8'b00001110;
         
-        //$display("  Expected wstrb: 0b%b", expected_strb);
-        //$display("  Actual wstrb:   0b%b", lsu_biu_wr_strb_ls2);
-        //
-        //if (lsu_biu_wr_strb_ls2 !== expected_strb) begin
-        //    $display("  ERROR: WSTRB mismatch!");
-        //    error_count = error_count + 1;
-        //end
-        
-	if (ale_exception !== 1) begin
+        if (ale_exception !== 1) begin
             $display("  ERROR: ALE exception should be triggered!");
-            error_count = error_count + 1;
-	end	
-
-	ale_exception = 0;
-
-        //print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
-        //verify_wstrb_data_combination(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
+            local_error = 1;
+        end    
+        
+        ale_exception = 0;
         send_biu_response();
         
-        $display("  [Test %0d] Completed", test_count);
+        // Display test result
+        if (local_error == 0) begin
+            $display("  [Test %0d] PASS", test_count);
+            test_passed = test_passed + 1;
+        end else begin
+            $display("  [Test %0d] FAIL", test_count);
+            test_failed = test_failed + 1;
+        end
     end
 endtask
 
@@ -780,8 +875,10 @@ endtask
 
 task test_sb_aligned_0;
     reg [31:0] test_addr;
+    integer local_error;
     
     begin
+        local_error = 0;
         test_count = test_count + 1;
         test_addr = 32'h4000;
         
@@ -811,20 +908,29 @@ task test_sb_aligned_0;
         
         if (lsu_biu_wr_strb_ls2 !== expected_strb) begin
             $display("  ERROR: WSTRB mismatch!");
-            error_count = error_count + 1;
+            local_error = 1;
         end
         
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response();
         
-        $display("  [Test %0d] Completed", test_count);
+        // Display test result
+        if (local_error == 0) begin
+            $display("  [Test %0d] PASS", test_count);
+            test_passed = test_passed + 1;
+        end else begin
+            $display("  [Test %0d] FAIL", test_count);
+            test_failed = test_failed + 1;
+        end
     end
 endtask
 
 task test_sb_aligned_4;
     reg [31:0] test_addr;
+    integer local_error;
     
     begin
+        local_error = 0;
         test_count = test_count + 1;
         test_addr = 32'h4004;
         
@@ -855,20 +961,29 @@ task test_sb_aligned_4;
         
         if (lsu_biu_wr_strb_ls2 !== expected_strb) begin
             $display("  ERROR: WSTRB mismatch!");
-            error_count = error_count + 1;
+            local_error = 1;
         end
         
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response();
         
-        $display("  [Test %0d] Completed", test_count);
+        // Display test result
+        if (local_error == 0) begin
+            $display("  [Test %0d] PASS", test_count);
+            test_passed = test_passed + 1;
+        end else begin
+            $display("  [Test %0d] FAIL", test_count);
+            test_failed = test_failed + 1;
+        end
     end
 endtask
 
 task test_sh_aligned_0;
     reg [31:0] test_addr;
+    integer local_error;
     
     begin
+        local_error = 0;
         test_count = test_count + 1;
         test_addr = 32'h4100;
         
@@ -898,20 +1013,29 @@ task test_sh_aligned_0;
         
         if (lsu_biu_wr_strb_ls2 !== expected_strb) begin
             $display("  ERROR: WSTRB mismatch!");
-            error_count = error_count + 1;
+            local_error = 1;
         end
         
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response();
         
-        $display("  [Test %0d] Completed", test_count);
+        // Display test result
+        if (local_error == 0) begin
+            $display("  [Test %0d] PASS", test_count);
+            test_passed = test_passed + 1;
+        end else begin
+            $display("  [Test %0d] FAIL", test_count);
+            test_failed = test_failed + 1;
+        end
     end
 endtask
 
 task test_sh_aligned_2;
     reg [31:0] test_addr;
+    integer local_error;
     
     begin
+        local_error = 0;
         test_count = test_count + 1;
         test_addr = 32'h4102;
         
@@ -941,20 +1065,29 @@ task test_sh_aligned_2;
         
         if (lsu_biu_wr_strb_ls2 !== expected_strb) begin
             $display("  ERROR: WSTRB mismatch!");
-            error_count = error_count + 1;
+            local_error = 1;
         end
         
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response();
         
-        $display("  [Test %0d] Completed", test_count);
+        // Display test result
+        if (local_error == 0) begin
+            $display("  [Test %0d] PASS", test_count);
+            test_passed = test_passed + 1;
+        end else begin
+            $display("  [Test %0d] FAIL", test_count);
+            test_failed = test_failed + 1;
+        end
     end
 endtask
 
 task test_sw_aligned_0;
     reg [31:0] test_addr;
+    integer local_error;
     
     begin
+        local_error = 0;
         test_count = test_count + 1;
         test_addr = 32'h4200;
         
@@ -984,20 +1117,29 @@ task test_sw_aligned_0;
         
         if (lsu_biu_wr_strb_ls2 !== expected_strb) begin
             $display("  ERROR: WSTRB mismatch!");
-            error_count = error_count + 1;
+            local_error = 1;
         end
         
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response();
         
-        $display("  [Test %0d] Completed", test_count);
+        // Display test result
+        if (local_error == 0) begin
+            $display("  [Test %0d] PASS", test_count);
+            test_passed = test_passed + 1;
+        end else begin
+            $display("  [Test %0d] FAIL", test_count);
+            test_failed = test_failed + 1;
+        end
     end
 endtask
 
 task test_sw_aligned_4;
     reg [31:0] test_addr;
+    integer local_error;
     
     begin
+        local_error = 0;
         test_count = test_count + 1;
         test_addr = 32'h4204;
         
@@ -1027,20 +1169,29 @@ task test_sw_aligned_4;
         
         if (lsu_biu_wr_strb_ls2 !== expected_strb) begin
             $display("  ERROR: WSTRB mismatch!");
-            error_count = error_count + 1;
+            local_error = 1;
         end
         
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response();
         
-        $display("  [Test %0d] Completed", test_count);
+        // Display test result
+        if (local_error == 0) begin
+            $display("  [Test %0d] PASS", test_count);
+            test_passed = test_passed + 1;
+        end else begin
+            $display("  [Test %0d] FAIL", test_count);
+            test_failed = test_failed + 1;
+        end
     end
 endtask
 
 task test_sd_aligned_0;
     reg [31:0] test_addr;
+    integer local_error;
     
     begin
+        local_error = 0;
         test_count = test_count + 1;
         test_addr = 32'h4300;
         
@@ -1070,13 +1221,20 @@ task test_sd_aligned_0;
         
         if (lsu_biu_wr_strb_ls2 !== expected_strb) begin
             $display("  ERROR: WSTRB mismatch!");
-            error_count = error_count + 1;
+            local_error = 1;
         end
         
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response();
         
-        $display("  [Test %0d] Completed", test_count);
+        // Display test result
+        if (local_error == 0) begin
+            $display("  [Test %0d] PASS", test_count);
+            test_passed = test_passed + 1;
+        end else begin
+            $display("  [Test %0d] FAIL", test_count);
+            test_failed = test_failed + 1;
+        end
     end
 endtask
 
@@ -1107,8 +1265,10 @@ endtask
 
 task test_32bit_boundary;
     reg [31:0] test_addr;
+    integer local_error;
     
     begin
+        local_error = 0;
         test_count = test_count + 1;
         test_addr = 32'h5003;
         
@@ -1139,20 +1299,29 @@ task test_32bit_boundary;
         
         if (lsu_biu_wr_strb_ls2 !== expected_strb) begin
             $display("  ERROR: WSTRB mismatch!");
-            error_count = error_count + 1;
+            local_error = 1;
         end
         
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response();
         
-        $display("  [Test %0d] Completed", test_count);
+        // Display test result
+        if (local_error == 0) begin
+            $display("  [Test %0d] PASS", test_count);
+            test_passed = test_passed + 1;
+        end else begin
+            $display("  [Test %0d] FAIL", test_count);
+            test_failed = test_failed + 1;
+        end
     end
 endtask
 
 task test_cross_32bit_boundary;
     reg [31:0] test_addr;
+    integer local_error;
     
     begin
+        local_error = 0;
         test_count = test_count + 1;
         test_addr = 32'h5004;
         
@@ -1183,20 +1352,29 @@ task test_cross_32bit_boundary;
         
         if (lsu_biu_wr_strb_ls2 !== expected_strb) begin
             $display("  ERROR: WSTRB mismatch!");
-            error_count = error_count + 1;
+            local_error = 1;
         end
         
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response();
         
-        $display("  [Test %0d] Completed", test_count);
+        // Display test result
+        if (local_error == 0) begin
+            $display("  [Test %0d] PASS", test_count);
+            test_passed = test_passed + 1;
+        end else begin
+            $display("  [Test %0d] FAIL", test_count);
+            test_failed = test_failed + 1;
+        end
     end
 endtask
 
 task test_high_address;
     reg [31:0] test_addr;
+    integer local_error;
     
     begin
+        local_error = 0;
         test_count = test_count + 1;
         test_addr = 32'hFFFF_FFFC;
         
@@ -1227,13 +1405,20 @@ task test_high_address;
         
         if (lsu_biu_wr_strb_ls2 !== expected_strb) begin
             $display("  ERROR: WSTRB mismatch!");
-            error_count = error_count + 1;
+            local_error = 1;
         end
         
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response();
         
-        $display("  [Test %0d] Completed", test_count);
+        // Display test result
+        if (local_error == 0) begin
+            $display("  [Test %0d] PASS", test_count);
+            test_passed = test_passed + 1;
+        end else begin
+            $display("  [Test %0d] FAIL", test_count);
+            test_failed = test_failed + 1;
+        end
     end
 endtask
 
@@ -1241,17 +1426,20 @@ endtask
 // Helper Tasks
 // ========================================
 
-task verify_wstrb_and_check_data;
+function integer verify_wstrb_and_check_data;
     input [7:0]  test_data;
     input integer position;
     
+    integer local_error;
     begin
+        local_error = 0;
+        
         $display("  Expected wstrb: 0b%b (0x%h)", expected_strb, expected_strb);
         $display("  Actual wstrb:   0b%b (0x%h)", lsu_biu_wr_strb_ls2, lsu_biu_wr_strb_ls2);
         
         if (lsu_biu_wr_strb_ls2 !== expected_strb) begin
             $display("  ERROR: WSTRB mismatch!");
-            error_count = error_count + 1;
+            local_error = 1;
         end else begin
             $display("  WSTRB correct!");
         end
@@ -1260,39 +1448,41 @@ task verify_wstrb_and_check_data;
         case (position)
             0: if (lsu_biu_wr_data_ls2[7:0] !== test_data) begin
                 $display("  ERROR: Data at position 0 incorrect!");
-                error_count = error_count + 1;
+                local_error = 1;
             end
             1: if (lsu_biu_wr_data_ls2[15:8] !== test_data) begin
                 $display("  ERROR: Data at position 1 incorrect!");
-                error_count = error_count + 1;
+                local_error = 1;
             end
             2: if (lsu_biu_wr_data_ls2[23:16] !== test_data) begin
                 $display("  ERROR: Data at position 2 incorrect!");
-                error_count = error_count + 1;
+                local_error = 1;
             end
             3: if (lsu_biu_wr_data_ls2[31:24] !== test_data) begin
                 $display("  ERROR: Data at position 3 incorrect!");
-                error_count = error_count + 1;
+                local_error = 1;
             end
             4: if (lsu_biu_wr_data_ls2[39:32] !== test_data) begin
                 $display("  ERROR: Data at position 4 incorrect!");
-                error_count = error_count + 1;
+                local_error = 1;
             end
             5: if (lsu_biu_wr_data_ls2[47:40] !== test_data) begin
                 $display("  ERROR: Data at position 5 incorrect!");
-                error_count = error_count + 1;
+                local_error = 1;
             end
             6: if (lsu_biu_wr_data_ls2[55:48] !== test_data) begin
                 $display("  ERROR: Data at position 6 incorrect!");
-                error_count = error_count + 1;
+                local_error = 1;
             end
             7: if (lsu_biu_wr_data_ls2[63:56] !== test_data) begin
                 $display("  ERROR: Data at position 7 incorrect!");
-                error_count = error_count + 1;
+                local_error = 1;
             end
         endcase
+        
+        verify_wstrb_and_check_data = local_error;
     end
-endtask
+endfunction
 
 task send_biu_response;
     begin
@@ -1354,7 +1544,7 @@ always @(posedge clk) begin
     // Monitor exception signals
     if (lsu_ecl_except_ale_ls1) begin
         $display("[%0t] ALE Exception at Address: 0x%h", $time, lsu_csr_except_badv_ls1);
-	ale_exception = 1;
+        ale_exception = 1;
     end
     
     if (lsu_ecl_except_buserr_ls3) begin
