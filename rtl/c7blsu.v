@@ -411,9 +411,21 @@ module c7blsu(
       .q   (lsu_align_mode_ls2),
       .se(), .si(), .so());
 
-   dff_s #(5) lsu_align_mode_ls3_reg (
+   // The memory read request is issued in LS2 via lsu_biu_rd_req_ls2. The
+   // BIU's response time is variable, acknowledgment via biu_lsu_rd_ack_ls2
+   // may occur in the same cycle or be delayed. This acknowledgment signal
+   // initiates the subsequent pipeline stage, LS3.
+   //
+   // Pipeline stages register data and control parameters, ensuring correct
+   // timing for subsequent operations. This allows the LSU to handle multiple
+   // overlapping requests, with a separate request occupying each stage (LS1,
+   // LS2, LS3) simultaneously.
+   // The current LSU pipeline is implemented for a single request at a time.
+
+   dffe_s #(5) lsu_align_mode_ls3_reg (
       .din (lsu_align_mode_ls2),
       .clk (clk),
+      .en  (biu_lsu_rd_ack_ls2),
       .q   (lsu_align_mode_ls3),
       .se(), .si(), .so());
 
@@ -423,9 +435,10 @@ module c7blsu(
       .q   (lsu_shift_ls2),
       .se(), .si(), .so());
 
-   dff_s #(3) lsu_shift_ls3_reg (
+   dffe_s #(3) lsu_shift_ls3_reg (
       .din (lsu_shift_ls2),
       .clk (clk),
+      .en  (biu_lsu_rd_ack_ls2),
       .q   (lsu_shift_ls3),
       .se(), .si(), .so());
 
@@ -447,9 +460,10 @@ module c7blsu(
       .q   (lsu_addr_ls2),
       .se(), .si(), .so());
 
-   dff_s #(32) lsu_addr_ls3_reg (
+   dffe_s #(32) lsu_addr_ls3_reg (
       .din (lsu_addr_ls2),
       .clk (clk),
+      .en  (biu_lsu_rd_ack_ls2),
       .q   (lsu_addr_ls3),
       .se(), .si(), .so());
 
