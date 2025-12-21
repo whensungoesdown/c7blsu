@@ -228,9 +228,9 @@ module c7blsu(
       .q     (biu_rd_req_q),
       .se(), .si(), .so());
 
-   assign lsu_biu_rd_req = biu_rd_req_in;
+   assign lsu_biu_rd_req_ls2 = biu_rd_req_in | biu_rd_req_q;
 
-   assign lsu_biu_rd_addr = {lsu_addr_ls2[31:3], 3'b000}; // 64-bit align
+   assign lsu_biu_rd_addr_ls2 = {lsu_addr_ls2[31:3], 3'b000}; // 64-bit align
 
    //
    // BIU write request 
@@ -327,8 +327,10 @@ module c7blsu(
       .q   (lsu_valid_ls1),
       .se(), .si(), .so());
 
+   // If ale occurs at ls1, it invalidates lsu_valid_ls2 and cancels
+   // subsequent lsu_biu_rd_req_ls2
    dffrl_s #(1) lsu_valid_ls2_reg (
-      .din (lsu_valid_ls1),
+      .din (lsu_valid_ls1 & ~lsu_ale_ls1),
       .clk (clk),
       .rst_l (resetn),
       .q   (lsu_valid_ls2),

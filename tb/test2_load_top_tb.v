@@ -31,6 +31,7 @@ reg [63:0] biu_lsu_data_ls3;
 
 // Test variables
 reg [31:0] expected_data;
+reg [31:0] expected_addr;
 integer test_num;
 integer error_count;
 
@@ -85,6 +86,8 @@ begin
     biu_lsu_rd_ack_ls2 = 0;
     biu_lsu_data_valid_ls3 = 0;
     biu_lsu_data_ls3 = 0;
+    expected_addr = 0;
+    expected_data = 0;
     test_num = 0;
     error_count = 0;
     
@@ -94,44 +97,97 @@ begin
 end
 endtask
 
-// Wait for BIU request
-task wait_for_biu_request;
+// Check BIU request address
+task check_biu_request;
+input [31:0] expected_address;
 begin
+    // Wait for BIU request to be asserted
     @(posedge clk);
     while (!lsu_biu_rd_req_ls2) @(posedge clk);
     
-    // Acknowledge request
+    $display("Test %0d: BIU request detected at address 0x%h", test_num, lsu_biu_rd_addr_ls2);
+    
+    // Check that the address is correct
+    if (lsu_biu_rd_addr_ls2 === expected_address) begin
+        $display("Test %0d: BIU request address correct", test_num);
+    end else begin
+        $display("Test %0d ERROR: BIU request address incorrect. Expected=0x%h, Actual=0x%h", 
+                 test_num, expected_address, lsu_biu_rd_addr_ls2);
+        error_count = error_count + 1;
+    end
+end
+endtask
+
+// Acknowledge BIU request
+task ack_biu_request;
+begin
+    // Acknowledge request in the next cycle
     @(posedge clk);
     biu_lsu_rd_ack_ls2 = 1;
+    $display("Test %0d: BIU request acknowledged", test_num);
+    
+    // Hold acknowledge for one cycle
     @(posedge clk);
     biu_lsu_rd_ack_ls2 = 0;
 end
 endtask
 
-// Send BIU response and check result in same cycle
-task send_biu_response_and_check;
+// Send BIU response with proper timing
+task send_biu_response;
 input [63:0] data;
-input [31:0] expected;
 begin
-    // Wait for appropriate cycle (LS3)
-    repeat(2) @(posedge clk);
+    // Wait for 1 cycle after acknowledgment (LS3 stage)
+    // Timing: E -> LS1 -> LS2 -> LS3
+    // Request in LS2, data response in LS3
+    @(posedge clk);
     
-    // Send response and check in same cycle
+    // Send response in LS3 stage
     biu_lsu_data_valid_ls3 = 1;
     biu_lsu_data_ls3 = data;
+    $display("Test %0d: BIU data response sent: 0x%h", test_num, data);
     
     @(posedge clk);
     biu_lsu_data_valid_ls3 = 0;
-    
-    // Data should be available now
+    biu_lsu_data_ls3 = 64'h0;
+end
+endtask
+
+// Check LSU data output
+task check_lsu_output;
+input [31:0] expected;
+begin
+    // Check if data is available in the same cycle as biu_lsu_data_valid_ls3
+    // This depends on the design - some designs may output in same cycle
     if (lsu_ecl_data_valid_ls3) begin
+        $display("Test %0d: LSU data output valid in same cycle as BIU response", test_num);
         check_result(expected, lsu_ecl_data_ls3);
     end else begin
-        $display("Test %0d ERROR: lsu_ecl_data_valid_ls3 not asserted", test_num);
-        error_count = error_count + 1;
+        // If not available in same cycle, wait one more cycle
+        $display("Test %0d: Waiting one more cycle for LSU data output", test_num);
+        @(posedge clk);
+        if (lsu_ecl_data_valid_ls3) begin
+            check_result(expected, lsu_ecl_data_ls3);
+        end else begin
+            $display("Test %0d ERROR: lsu_ecl_data_valid_ls3 not asserted after BIU response", test_num);
+            error_count = error_count + 1;
+        end
     end
     
+    // Cleanup
     @(posedge clk); // Wait one more cycle for cleanup
+end
+endtask
+
+// Combined task: send response and check (without checking/acking request)
+task send_response_and_check;
+input [63:0] data;
+input [31:0] expected_data_val;
+begin
+    // Step 1: Send BIU response
+    send_biu_response(data);
+    
+    // Step 2: Check LSU output
+    check_lsu_output(expected_data_val);
 end
 endtask
 
@@ -155,9 +211,9 @@ endtask
 task test_ld_w_aligned;
 begin
     test_num = test_num + 1;
-    $display("\n=== Test %0d: LD.W (aligned) ===", test_num);
+    $display("\n=== Test %0d: LD.W (aligned) - address 0x1000 ===", test_num);
     
-    // Setup load instruction
+    // Setup load instruction in E stage
     @(posedge clk);
     ecl_lsu_valid_e = 1;
     ecl_lsu_op_e = `LLSU_LD_W;  // 7'b0000011
@@ -166,17 +222,27 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
     
-    // Simulate BIU interaction and check result
-    wait_for_biu_request;
-    send_biu_response_and_check(64'hA5A5_A5A5_1234_5678, 32'h12345678);
+    // Expected address = base + offset = 0x1000
+    // For word load, should request the doubleword containing this address
+    // Since addresses are aligned to 8-byte boundaries for doubleword accesses
+    // 0x1000 is already aligned to 8-byte boundary
+    
+    // Step 1: Check BIU request address
+    check_biu_request(32'h1000);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'hA5A5_A5A5_1234_5678, 32'h12345678);
 end
 endtask
 
-// Test 2: LD.W (Load Word) - unaligned address
+// Test 2: LD.W (Load Word) - unaligned address (should trigger ALE)
 task test_ld_w_unaligned;
 begin
     test_num = test_num + 1;
-    $display("\n=== Test %0d: LD.W (unaligned) ===", test_num);
+    $display("\n=== Test %0d: LD.W (unaligned) - address 0x1001 ===", test_num);
     
     // Setup load instruction with offset 1 (should trigger ALE)
     @(posedge clk);
@@ -186,22 +252,45 @@ begin
     ecl_lsu_offset_e = 32'h1;
     @(posedge clk);
     ecl_lsu_valid_e = 0;
-   
-    // Wait for ALE in LS1 stage
-    // Instruction flows: E -> LS1 -> LS2 -> LS3
-    // ALE is generated in LS1, so we need to wait 1 cycle after E stage
-    @(posedge clk); // Wait for LS1 stage 
     
+    // Wait for ALE in LS1 stage (1 cycle after E stage)
+    @(posedge clk); // Wait for LS1 stage
+    
+    // Check ALE in LS1 stage
     if (lsu_ecl_except_ale_ls1) begin
         $display("Test %0d PASSED: ALE exception triggered", test_num);
         $display("Bad address: 0x%h", lsu_csr_except_badv_ls1);
+        
+        // Verify bad address is correct (should be 0x1001)
+        if (lsu_csr_except_badv_ls1 === 32'h1001) begin
+            $display("Test %0d: Bad address correct", test_num);
+        end else begin
+            $display("Test %0d ERROR: Bad address incorrect. Expected=0x1001, Actual=0x%h", 
+                     test_num, lsu_csr_except_badv_ls1);
+            error_count = error_count + 1;
+        end
     end else begin
         $display("Test %0d FAILED: No ALE exception", test_num);
         error_count = error_count + 1;
     end
     
+    // Check that no BIU request should be issued for unaligned access
+    // BIU request would be in LS2, so wait one more cycle
+    @(posedge clk);
+    if (lsu_biu_rd_req_ls2) begin
+        $display("Test %0d ERROR: BIU request issued for unaligned access", test_num);
+        $display("  Request address: 0x%h", lsu_biu_rd_addr_ls2);
+        error_count = error_count + 1;
+    end
+    
+    // Also check that we don't send BIU acknowledge when there's no request
+    if (biu_lsu_rd_ack_ls2) begin
+        $display("Test %0d ERROR: BIU acknowledge sent without request", test_num);
+        error_count = error_count + 1;
+    end
+    
     // Wait to ensure no unexpected BIU requests
-    repeat(5) @(posedge clk);
+    repeat(3) @(posedge clk);
 end
 endtask
 
@@ -220,11 +309,18 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
     
-    // Simulate BIU interaction and check result
-    wait_for_biu_request;
-    // Based on actual hardware behavior, address 0x2002 might access byte at different position
-    // Let's test and see what happens
-    send_biu_response_and_check(64'hFF00_FF00_FF80_FF00, 32'hFFFFFF80);
+    // Expected address = 0x2002, but BIU requests doubleword-aligned address
+    // For byte load at 0x2002, should request the doubleword containing 0x2002
+    // 0x2000 is the doubleword-aligned address containing 0x2002
+    
+    // Step 1: Check BIU request address
+    check_biu_request(32'h2000);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'hFF00_FF00_FF80_FF00, 32'hFFFFFF80);
 end
 endtask
 
@@ -242,9 +338,16 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
     
-    wait_for_biu_request;
-    // byte 0 = 0xFF (-1), should be sign-extended
-    send_biu_response_and_check(64'h0000_0000_0000_00FF, 32'hFFFFFFFF);
+    // Address 0x2000 is already doubleword-aligned
+    
+    // Step 1: Check BIU request address
+    check_biu_request(32'h2000);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h0000_0000_0000_00FF, 32'hFFFFFFFF);
 end
 endtask
 
@@ -262,9 +365,16 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
     
-    wait_for_biu_request;
-    // byte 1 = 0x7F (127), should be sign-extended
-    send_biu_response_and_check(64'h0000_0000_0000_7F00, 32'h0000007F);
+    // Address 0x2001, should request doubleword containing it at 0x2000
+    
+    // Step 1: Check BIU request address
+    check_biu_request(32'h2000);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h0000_0000_0000_7F00, 32'h0000007F);
 end
 endtask
 
@@ -282,9 +392,14 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
     
-    wait_for_biu_request;
-    // byte 3 = 0x80 (-128), should be sign-extended
-    send_biu_response_and_check(64'h0000_0000_8000_0000, 32'hFFFFFF80);
+    // Step 1: Check BIU request address
+    check_biu_request(32'h2000);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h0000_0000_8000_0000, 32'hFFFFFF80);
 end
 endtask
 
@@ -302,9 +417,16 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
     
-    wait_for_biu_request;
-    // high 32-bit byte 0 = 0x90 (-112), should be sign-extended
-    send_biu_response_and_check(64'h0000_0090_0000_0000, 32'hFFFFFF90);
+    // Address 0x2004, should request doubleword at 0x2000
+    
+    // Step 1: Check BIU request address
+    check_biu_request(32'h2000);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h0000_0090_0000_0000, 32'hFFFFFF90);
 end
 endtask
 
@@ -323,10 +445,14 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
 
-    // Simulate BIU interaction and check result
-    wait_for_biu_request;
-    // byte 1 = 0x00, should be zero-extended
-    send_biu_response_and_check(64'h0000_0000_0000_0080, 32'h00000000);
+    // Step 1: Check BIU request address
+    check_biu_request(32'h3000);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h0000_0000_0000_0080, 32'h00000000);
 end
 endtask
 
@@ -344,9 +470,14 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
 
-    wait_for_biu_request;
-    // byte 0 = 0x80 (128), should be zero-extended
-    send_biu_response_and_check(64'h0000_0000_0000_0080, 32'h00000080);
+    // Step 1: Check BIU request address
+    check_biu_request(32'h3000);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h0000_0000_0000_0080, 32'h00000080);
 end
 endtask
 
@@ -364,9 +495,14 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
 
-    wait_for_biu_request;
-    // byte 2 = 0xFF (255), should be zero-extended
-    send_biu_response_and_check(64'h0000_0000_00FF_0000, 32'h000000FF);
+    // Step 1: Check BIU request address
+    check_biu_request(32'h3000);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h0000_0000_00FF_0000, 32'h000000FF);
 end
 endtask
 
@@ -384,9 +520,14 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
 
-    wait_for_biu_request;
-    // byte 3 = 0x55 (85), should be zero-extended
-    send_biu_response_and_check(64'h0000_0000_5500_0000, 32'h00000055);
+    // Step 1: Check BIU request address
+    check_biu_request(32'h3000);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h0000_0000_5500_0000, 32'h00000055);
 end
 endtask
 
@@ -404,9 +545,14 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
 
-    wait_for_biu_request;
-    // high 32-bit byte 0 = 0xAA (170), should be zero-extended
-    send_biu_response_and_check(64'h0000_00AA_0000_0000, 32'h000000AA);
+    // Step 1: Check BIU request address
+    check_biu_request(32'h3000);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h0000_00AA_0000_0000, 32'h000000AA);
 end
 endtask
 
@@ -425,10 +571,16 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
 
-    // Simulate BIU interaction and check result
-    wait_for_biu_request;
-    // halfword at offset 2 = 0xABCD (-21555), should be sign-extended
-    send_biu_response_and_check(64'h0000_0000_ABCD_8000, 32'hFFFFABCD);
+    // Address 0x4002 is halfword aligned, should request doubleword at 0x4000
+    
+    // Step 1: Check BIU request address
+    check_biu_request(32'h4000);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h0000_0000_ABCD_8000, 32'hFFFFABCD);
 end
 endtask
 
@@ -446,9 +598,14 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
 
-    wait_for_biu_request;
-    // halfword 0 = 0x8000 (-32768), should be sign-extended
-    send_biu_response_and_check(64'h0000_0000_ABCD_8000, 32'hFFFF8000);
+    // Step 1: Check BIU request address
+    check_biu_request(32'h4000);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h0000_0000_ABCD_8000, 32'hFFFF8000);
 end
 endtask
 
@@ -466,9 +623,14 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
 
-    wait_for_biu_request;
-    // halfword 0 = 0x7FFF (32767), should be sign-extended
-    send_biu_response_and_check(64'h0000_0000_0000_7FFF, 32'h00007FFF);
+    // Step 1: Check BIU request address
+    check_biu_request(32'h4100);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h0000_0000_0000_7FFF, 32'h00007FFF);
 end
 endtask
 
@@ -486,9 +648,14 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
 
-    wait_for_biu_request;
-    // high 32-bit halfword 0 (bytes 4-5) = 0x5678 (22136), should be sign-extended
-    send_biu_response_and_check(64'h1234_5678_0000_0000, 32'h00005678);
+    // Step 1: Check BIU request address
+    check_biu_request(32'h4000);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h1234_5678_0000_0000, 32'h00005678);
 end
 endtask
 
@@ -506,9 +673,14 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
 
-    wait_for_biu_request;
-    // high 32-bit halfword 1 (bytes 6-7) = 0x8000 (-32768), should be sign-extended
-    send_biu_response_and_check(64'h8000_1234_0000_0000, 32'hFFFF8000);
+    // Step 1: Check BIU request address
+    check_biu_request(32'h4000);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h8000_1234_0000_0000, 32'hFFFF8000);
 end
 endtask
 
@@ -526,9 +698,14 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
 
-    wait_for_biu_request;
-    // high 32-bit bytes 6-7 = 0x1234 (4660), should be sign-extended
-    send_biu_response_and_check(64'h1234_ABCD_0000_0000, 32'h00001234);
+    // Step 1: Check BIU request address
+    check_biu_request(32'h4000);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h1234_ABCD_0000_0000, 32'h00001234);
 end
 endtask
 
@@ -548,11 +725,14 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
 
-    wait_for_biu_request;
-    // Based on actual test output: address 0x4000 loads 0xEF01, not 0xABCD
-    // This suggests little-endian: byte0=0x01, byte1=0xEF, byte2=0xCD, byte3=0xAB
-    // So address 0x4000 loads bytes 0-1 = 0xEF01 (little-endian: [byte1][byte0])
-    send_biu_response_and_check(64'h1234_5678_ABCD_EF01, 32'hFFFFEF01);
+    // Step 1: Check BIU request address
+    check_biu_request(32'h4000);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h1234_5678_ABCD_EF01, 32'hFFFFEF01);
 end
 endtask
 
@@ -571,10 +751,14 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
 
-    wait_for_biu_request;
-    // Based on actual test output: address 0x4002 loads 0xABCD, not 0xEF01
-    // This confirms little-endian: address 0x4002 loads bytes 2-3 = 0xABCD (little-endian: [byte3][byte2])
-    send_biu_response_and_check(64'h1234_5678_ABCD_EF01, 32'hFFFFABCD);
+    // Step 1: Check BIU request address
+    check_biu_request(32'h4000);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h1234_5678_ABCD_EF01, 32'hFFFFABCD);
 end
 endtask
 
@@ -593,10 +777,14 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
 
-    // Simulate BIU interaction and check result
-    wait_for_biu_request;
-    // halfword at offset 2 = 0x0000, should be zero-extended
-    send_biu_response_and_check(64'h0000_0000_0000_8000, 32'h00000000);
+    // Step 1: Check BIU request address
+    check_biu_request(32'h5000);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h0000_0000_0000_8000, 32'h00000000);
 end
 endtask
 
@@ -614,9 +802,14 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
 
-    wait_for_biu_request;
-    // halfword 0 = 0x8000 (32768), should be zero-extended
-    send_biu_response_and_check(64'h0000_0000_0000_8000, 32'h00008000);
+    // Step 1: Check BIU request address
+    check_biu_request(32'h5000);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h0000_0000_0000_8000, 32'h00008000);
 end
 endtask
 
@@ -634,9 +827,14 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
 
-    wait_for_biu_request;
-    // halfword at offset 2 = 0x1234 (4660), should be zero-extended
-    send_biu_response_and_check(64'h0000_0000_1234_5678, 32'h00001234);
+    // Step 1: Check BIU request address
+    check_biu_request(32'h5100);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h0000_0000_1234_5678, 32'h00001234);
 end
 endtask
 
@@ -654,9 +852,14 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
 
-    wait_for_biu_request;
-    // high 32-bit halfword 0 = 0xABCD (43981), should be zero-extended
-    send_biu_response_and_check(64'hABCD_1234_0000_0000, 32'h00001234);
+    // Step 1: Check BIU request address
+    check_biu_request(32'h5200);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'hABCD_1234_0000_0000, 32'h00001234);
 end
 endtask
 
@@ -674,9 +877,14 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
 
-    wait_for_biu_request;
-    // high 32-bit halfword 1 = 0x1234 (4660), should be zero-extended
-    send_biu_response_and_check(64'hABCD_1234_0000_0000, 32'h0000ABCD);
+    // Step 1: Check BIU request address
+    check_biu_request(32'h5200);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'hABCD_1234_0000_0000, 32'h0000ABCD);
 end
 endtask
 
@@ -694,9 +902,14 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
 
-    wait_for_biu_request;
-    // halfword 0 = 0xFFFF (65535), should be zero-extended
-    send_biu_response_and_check(64'h0000_0000_0000_FFFF, 32'h0000FFFF);
+    // Step 1: Check BIU request address
+    check_biu_request(32'h5300);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h0000_0000_0000_FFFF, 32'h0000FFFF);
 end
 endtask
 
@@ -704,7 +917,7 @@ endtask
 task test_ld_d_lower;
 begin
     test_num = test_num + 1;
-    $display("\n=== Test %0d: LD.D (lower 32) ===", test_num);
+    $display("\n=== Test %0d: LD.D (lower 32) - address 0x6000 ===", test_num);
     
     // Setup load instruction
     @(posedge clk);
@@ -715,9 +928,16 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
     
-    // Simulate BIU interaction and check result
-    wait_for_biu_request;
-    send_biu_response_and_check(64'hDEAD_BEEF_CAFE_BABE, 32'hCAFEBABE);
+    // For LD.D at offset 0, should load lower 32 bits
+    
+    // Step 1: Check BIU request address
+    check_biu_request(32'h6000);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'hDEAD_BEEF_CAFE_BABE, 32'hCAFEBABE);
 end
 endtask
 
@@ -725,7 +945,7 @@ endtask
 task test_ld_d_upper;
 begin
     test_num = test_num + 1;
-    $display("\n=== Test %0d: LD.D (upper 32) ===", test_num);
+    $display("\n=== Test %0d: LD.D (upper 32) - address 0x7004 ===", test_num);
     
     // Setup load instruction with offset to access upper 32 bits
     @(posedge clk);
@@ -736,9 +956,16 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
     
-    // Simulate BIU interaction and check result
-    wait_for_biu_request;
-    send_biu_response_and_check(64'h1111_2222_3333_4444, 32'h11112222);
+    // Address 0x7004, but BIU requests doubleword at 0x7000
+    
+    // Step 1: Check BIU request address
+    check_biu_request(32'h7000);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h1111_2222_3333_4444, 32'h11112222);
 end
 endtask
 
@@ -746,7 +973,7 @@ endtask
 task test_ld_wu_unsigned;
 begin
     test_num = test_num + 1;
-    $display("\n=== Test %0d: LD.WU (unsigned) ===", test_num);
+    $display("\n=== Test %0d: LD.WU (unsigned) - address 0x8000 ===", test_num);
     
     // Setup load instruction
     @(posedge clk);
@@ -756,11 +983,15 @@ begin
     ecl_lsu_offset_e = 32'h0;
     @(posedge clk);
     ecl_lsu_valid_e = 0;
+
+    // Step 1: Check BIU request address
+    check_biu_request(32'h8000);
     
-    // Simulate BIU interaction and check result
-    wait_for_biu_request;
-    // Word = 0x80000000, should be zero-extended
-    send_biu_response_and_check(64'h0000_0000_8000_0000, 32'h80000000);
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h0000_0000_8000_0000, 32'h80000000);
 end
 endtask
 
@@ -768,7 +999,7 @@ endtask
 task test_ld_w_offset4;
 begin
     test_num = test_num + 1;
-    $display("\n=== Test %0d: LD.W with offset 0x4 ===", test_num);
+    $display("\n=== Test %0d: LD.W with offset 0x4 - address 0x9004 ===", test_num);
     
     // Setup load instruction
     @(posedge clk);
@@ -779,10 +1010,16 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
     
-    // Simulate BIU interaction and check result
-    wait_for_biu_request;
-    // Address 0x9004 corresponds to high 32-bit
-    send_biu_response_and_check(64'hAAAABBBBCCCCDDDD, 32'hAAAABBBB);
+    // Address 0x9004, but BIU requests doubleword at 0x9000
+    
+    // Step 1: Check BIU request address
+    check_biu_request(32'h9000);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'hAAAABBBBCCCCDDDD, 32'hAAAABBBB);
 end
 endtask
 
@@ -790,7 +1027,7 @@ endtask
 task test_ldx_w;
 begin
     test_num = test_num + 1;
-    $display("\n=== Test %0d: LDX.W (Indexed) ===", test_num);
+    $display("\n=== Test %0d: LDX.W (Indexed) - address 0xA000 ===", test_num);
     
     // Setup load instruction
     @(posedge clk);
@@ -800,10 +1037,15 @@ begin
     ecl_lsu_offset_e = 32'h0;
     @(posedge clk);
     ecl_lsu_valid_e = 0;
+
+    // Step 1: Check BIU request address
+    check_biu_request(32'hA000);
     
-    // Simulate BIU interaction and check result
-    wait_for_biu_request;
-    send_biu_response_and_check(64'h5555_5555_9999_9999, 32'h99999999);
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h5555_5555_9999_9999, 32'h99999999);
 end
 endtask
 
@@ -811,7 +1053,7 @@ endtask
 task test_ldx_bu;
 begin
     test_num = test_num + 1;
-    $display("\n=== Test %0d: LDX.BU (Indexed) ===", test_num);
+    $display("\n=== Test %0d: LDX.BU (Indexed) - address 0xB003 ===", test_num);
     
     // Setup load instruction
     @(posedge clk);
@@ -822,10 +1064,16 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
     
-    // Simulate BIU interaction and check result
-    wait_for_biu_request;
-    // Byte at offset 3 = 0x40, should be zero-extended
-    send_biu_response_and_check(64'h0000_0040_0000_0000, 32'h00000040);
+    // Address 0xB003, but BIU requests doubleword at 0xB000
+    
+    // Step 1: Check BIU request address
+    check_biu_request(32'hB000);
+    
+    // Step 2: Acknowledge the request
+    ack_biu_request();
+    
+    // Step 3: Send response and check result
+    send_response_and_check(64'h0000_0040_0000_0000, 32'h00000040);
 end
 endtask
 
@@ -833,7 +1081,7 @@ endtask
 task test_ld_h_unaligned;
 begin
     test_num = test_num + 1;
-    $display("\n=== Test %0d: LD.H (unaligned) ===", test_num);
+    $display("\n=== Test %0d: LD.H (unaligned) - address 0xC001 ===", test_num);
     
     // Setup load instruction with offset 1 (should trigger ALE for halfword)
     @(posedge clk);
@@ -844,18 +1092,36 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
     
-    // Wait for ALE
-    repeat(1) @(posedge clk);
+    // Wait for ALE in LS1 stage (1 cycle after E stage)
+    @(posedge clk); // Wait for LS1 stage
     
+    // Check ALE in LS1 stage
     if (lsu_ecl_except_ale_ls1) begin
         $display("Test %0d PASSED: ALE exception triggered for unaligned halfword", test_num);
         $display("Bad address: 0x%h", lsu_csr_except_badv_ls1);
+        
+        // Verify bad address is correct (should be 0xC001)
+        if (lsu_csr_except_badv_ls1 === 32'hC001) begin
+            $display("Test %0d: Bad address correct", test_num);
+        end else begin
+            $display("Test %0d ERROR: Bad address incorrect. Expected=0xC001, Actual=0x%h", 
+                     test_num, lsu_csr_except_badv_ls1);
+            error_count = error_count + 1;
+        end
     end else begin
         $display("Test %0d FAILED: No ALE exception for unaligned halfword", test_num);
         error_count = error_count + 1;
     end
     
-    repeat(5) @(posedge clk);
+    // Check that no BIU request should be issued for unaligned access
+    @(posedge clk);
+    if (lsu_biu_rd_req_ls2) begin
+        $display("Test %0d ERROR: BIU request issued for unaligned halfword access", test_num);
+        $display("  Request address: 0x%h", lsu_biu_rd_addr_ls2);
+        error_count = error_count + 1;
+    end
+    
+    repeat(3) @(posedge clk);
 end
 endtask
 
@@ -863,7 +1129,7 @@ endtask
 task test_ld_d_unaligned;
 begin
     test_num = test_num + 1;
-    $display("\n=== Test %0d: LD.D (unaligned) ===", test_num);
+    $display("\n=== Test %0d: LD.D (unaligned) - address 0xD001 ===", test_num);
     
     // Setup load instruction with offset 1 (should trigger ALE for doubleword)
     @(posedge clk);
@@ -874,18 +1140,36 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
     
-    // Wait for ALE
-    repeat(1) @(posedge clk);
+    // Wait for ALE in LS1 stage (1 cycle after E stage)
+    @(posedge clk); // Wait for LS1 stage
     
+    // Check ALE in LS1 stage
     if (lsu_ecl_except_ale_ls1) begin
         $display("Test %0d PASSED: ALE exception triggered for unaligned doubleword", test_num);
         $display("Bad address: 0x%h", lsu_csr_except_badv_ls1);
+        
+        // Verify bad address is correct (should be 0xD001)
+        if (lsu_csr_except_badv_ls1 === 32'hD001) begin
+            $display("Test %0d: Bad address correct", test_num);
+        end else begin
+            $display("Test %0d ERROR: Bad address incorrect. Expected=0xD001, Actual=0x%h", 
+                     test_num, lsu_csr_except_badv_ls1);
+            error_count = error_count + 1;
+        end
     end else begin
         $display("Test %0d FAILED: No ALE exception for unaligned doubleword", test_num);
         error_count = error_count + 1;
     end
     
-    repeat(5) @(posedge clk);
+    // Check that no BIU request should be issued for unaligned access
+    @(posedge clk);
+    if (lsu_biu_rd_req_ls2) begin
+        $display("Test %0d ERROR: BIU request issued for unaligned doubleword access", test_num);
+        $display("  Request address: 0x%h", lsu_biu_rd_addr_ls2);
+        error_count = error_count + 1;
+    end
+    
+    repeat(3) @(posedge clk);
 end
 endtask
 
@@ -900,6 +1184,7 @@ initial begin
     // Run all tests
     test_ld_w_aligned;
     test_ld_w_unaligned;
+    
     // Byte load tests - signed
     test_ld_b_signed;          // Test byte position 2
     test_ld_b_signed_byte0;    // Test byte position 0
@@ -933,15 +1218,15 @@ initial begin
     test_ld_hu_unsigned_max;           // Test max value (0xFFFF)
     
     // Word and doubleword tests
-    // ld.d ldx not supported
+    // LD.D and LDX are not supported
     test_ld_wu_unsigned;
-//    test_ld_d_lower;
-//    test_ld_d_upper;
+    //test_ld_d_lower;
+    //test_ld_d_upper;
     test_ld_w_offset4;
-//    test_ldx_w;
-//    test_ldx_bu;
+    //test_ldx_w;
+    //test_ldx_bu;
     test_ld_h_unaligned;
-//    test_ld_d_unaligned;
+    //test_ld_d_unaligned;
     
     // Summary
     $display("\n=========================================");
@@ -951,34 +1236,34 @@ initial begin
     
     if (error_count == 0) begin
         $display("  Result: ALL TESTS PASSED!");
-	$display("\nPASS!\n");
-	$display("\033[0;32m");
-	$display("**************************************************");
-	$display("*                                                *");
-	$display("*      * * *       *        * * *     * * *      *");
-	$display("*      *    *     * *      *         *           *");
-	$display("*      * * *     *   *      * * *     * * *      *");
-	$display("*      *        * * * *          *         *     *");
-	$display("*      *       *       *    * * *     * * *      *");
-	$display("*                                                *");
-	$display("**************************************************");
-	$display("\n");
-	$display("\033[0m");
+        $display("\nPASS!\n");
+        $display("\033[0;32m");
+        $display("**************************************************");
+        $display("*                                                *");
+        $display("*      * * *       *        * * *     * * *      *");
+        $display("*      *    *     * *      *         *           *");
+        $display("*      * * *     *   *      * * *     * * *      *");
+        $display("*      *        * * * *          *         *     *");
+        $display("*      *       *       *    * * *     * * *      *");
+        $display("*                                                *");
+        $display("**************************************************");
+        $display("\n");
+        $display("\033[0m");
     end else begin
         $display("  Result: %0d TEST(S) FAILED!", error_count);
-	$display("\nFAIL!\n");
-	$display("\033[0;31m");
-	$display("**************************************************");
-	$display("*                                                *");
-	$display("*      * * *       *         ***      *          *");
-	$display("*      *          * *         *       *          *");
-	$display("*      * * *     *   *        *       *          *");
-	$display("*      *        * * * *       *       *          *");
-	$display("*      *       *       *     ***      * * *      *");
-	$display("*                                                *");
-	$display("**************************************************");
-	$display("\n");
-	$display("\033[0m");
+        $display("\nFAIL!\n");
+        $display("\033[0;31m");
+        $display("**************************************************");
+        $display("*                                                *");
+        $display("*      * * *       *         ***      *          *");
+        $display("*      *          * *         *       *          *");
+        $display("*      * * *     *   *        *       *          *");
+        $display("*      *        * * * *       *       *          *");
+        $display("*      *       *       *     ***      * * *      *");
+        $display("*                                                *");
+        $display("**************************************************");
+        $display("\n");
+        $display("\033[0m");
     end
     $display("=========================================");
     

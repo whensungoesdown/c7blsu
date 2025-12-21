@@ -19,3 +19,7 @@ add wave -divider
 add wave -position end  result:/top_tb/biu_lsu_data_ls3
 add wave -position end  result:/top_tb/biu_lsu_data_valid_ls3
 add wave -divider
+add wave -position end  result:/top_tb/lsu_biu_rd_addr_ls2
+add wave -position end  result:/top_tb/lsu_biu_rd_req_ls2
+add wave -position end  result:/top_tb/biu_lsu_rd_ack_ls2
+add wave -divider
