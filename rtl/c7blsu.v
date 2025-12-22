@@ -211,7 +211,41 @@ module c7blsu(
    //
    // BIU read request
    //
-   
+
+  
+   // 
+   // When managing the lsu_biu_rd_req_ls2 signals (the same with
+   // lsu_biu_wr_req_ls2), three implementation options exist:
+   //
+   // Option 1, lsu_biu_rd_req_ls2 = biu_rd_req_in;
+   // Since biu_rd_req_in may involve combinational logic on the BIU side,
+   // this could establish a feedback loop depending on how biu_lsu_rd_ack_ls2
+   // is handled.
+   //
+   // Option 2, lsu_biu_rd_req_ls2 = biu_rd_req_q;
+   // This is the current selected approach. It avoids looping and ensures
+   // correct handshaking, though it introduces a one-cycle latency even when
+   // the LSU is free.
+   //
+   // Option 3, lsu_biu_rd_req_ls2 = biu_rd_req_in | biu_rd_req_q;
+   // This resembles AXI-style VALID/READY signaling in most cases:
+   //
+   // lsu_valid_ls2 & lsu_load_ls2 : _-_____
+   // biu_lsu_rd_ack_ls2           : _____-_
+   // lsu_biu_rd_req_ls2           : _-----_
+   //
+   // However, when start and end occur in the same cycle, the behavior
+   // changes:
+   //
+   // lsu_valid_ls2 & lsu_load_ls2 : _-_____
+   // biu_lsu_rd_ack_ls2           : _--____
+   // lsu_biu_rd_req_ls2           : _--____
+   //
+   // This still requires two cycles and results in an awkward timing
+   // appearance for biu_lsu_rd_ack_ls2
+   //
+
+
    // lsu_valid_ls2 & lsu_load_ls2        : _-_____
    // biu_lsu_rd_ack_ls2                  : _____-_
    //
@@ -230,7 +264,7 @@ module c7blsu(
       .q     (biu_rd_req_q),
       .se(), .si(), .so());
 
-   assign lsu_biu_rd_req_ls2 = biu_rd_req_in | biu_rd_req_q;
+   assign lsu_biu_rd_req_ls2 = biu_rd_req_q;
 
    assign lsu_biu_rd_addr_ls2 = {lsu_addr_ls2[31:3], 3'b000}; // 64-bit align
 
@@ -256,7 +290,7 @@ module c7blsu(
       .q     (biu_wr_req_q),
       .se(), .si(), .so());
 
-   assign lsu_biu_wr_req_ls2 = biu_wr_req_in;
+   assign lsu_biu_wr_req_ls2 = biu_wr_req_q;
 
    assign lsu_biu_wr_addr_ls2 = {lsu_addr_ls2[31:3], 3'b000}; // 64-bit align
 
