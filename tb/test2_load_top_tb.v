@@ -19,7 +19,7 @@ wire lsu_ecl_data_valid_ls3;
 wire [31:0] lsu_ecl_data_ls3;
 wire lsu_ecl_wr_fin_ls3;
 wire lsu_ecl_except_ale_ls1;
-wire [31:0] lsu_csr_except_badv_ls1;
+wire [31:0] lsu_ecl_except_badv_ls1;
 wire lsu_ecl_except_buserr_ls3;
 wire lsu_ecl_except_ecc_ls3;
 
@@ -55,7 +55,7 @@ c7blsu dut (
     .lsu_ecl_data_ls3(lsu_ecl_data_ls3),
     .lsu_ecl_wr_fin_ls3(lsu_ecl_wr_fin_ls3),
     .lsu_ecl_except_ale_ls1(lsu_ecl_except_ale_ls1),
-    .lsu_csr_except_badv_ls1(lsu_csr_except_badv_ls1),
+    .lsu_ecl_except_badv_ls1(lsu_ecl_except_badv_ls1),
     .lsu_ecl_except_buserr_ls3(lsu_ecl_except_buserr_ls3),
     .lsu_ecl_except_ecc_ls3(lsu_ecl_except_ecc_ls3),
     
@@ -261,14 +261,14 @@ begin
     // Check ALE in LS1 stage
     if (lsu_ecl_except_ale_ls1) begin
         $display("Test %0d PASSED: ALE exception triggered", test_num);
-        $display("Bad address: 0x%h", lsu_csr_except_badv_ls1);
+        $display("Bad address: 0x%h", lsu_ecl_except_badv_ls1);
         
         // Verify bad address is correct (should be 0x1001)
-        if (lsu_csr_except_badv_ls1 === 32'h1001) begin
+        if (lsu_ecl_except_badv_ls1 === 32'h1001) begin
             $display("Test %0d: Bad address correct", test_num);
         end else begin
             $display("Test %0d ERROR: Bad address incorrect. Expected=0x1001, Actual=0x%h", 
-                     test_num, lsu_csr_except_badv_ls1);
+                     test_num, lsu_ecl_except_badv_ls1);
             error_count = error_count + 1;
         end
     end else begin
@@ -1100,14 +1100,14 @@ begin
     // Check ALE in LS1 stage
     if (lsu_ecl_except_ale_ls1) begin
         $display("Test %0d PASSED: ALE exception triggered for unaligned halfword", test_num);
-        $display("Bad address: 0x%h", lsu_csr_except_badv_ls1);
+        $display("Bad address: 0x%h", lsu_ecl_except_badv_ls1);
         
         // Verify bad address is correct (should be 0xC001)
-        if (lsu_csr_except_badv_ls1 === 32'hC001) begin
+        if (lsu_ecl_except_badv_ls1 === 32'hC001) begin
             $display("Test %0d: Bad address correct", test_num);
         end else begin
             $display("Test %0d ERROR: Bad address incorrect. Expected=0xC001, Actual=0x%h", 
-                     test_num, lsu_csr_except_badv_ls1);
+                     test_num, lsu_ecl_except_badv_ls1);
             error_count = error_count + 1;
         end
     end else begin
@@ -1148,14 +1148,14 @@ begin
     // Check ALE in LS1 stage
     if (lsu_ecl_except_ale_ls1) begin
         $display("Test %0d PASSED: ALE exception triggered for unaligned doubleword", test_num);
-        $display("Bad address: 0x%h", lsu_csr_except_badv_ls1);
+        $display("Bad address: 0x%h", lsu_ecl_except_badv_ls1);
         
         // Verify bad address is correct (should be 0xD001)
-        if (lsu_csr_except_badv_ls1 === 32'hD001) begin
+        if (lsu_ecl_except_badv_ls1 === 32'hD001) begin
             $display("Test %0d: Bad address correct", test_num);
         end else begin
             $display("Test %0d ERROR: Bad address incorrect. Expected=0xD001, Actual=0x%h", 
-                     test_num, lsu_csr_except_badv_ls1);
+                     test_num, lsu_ecl_except_badv_ls1);
             error_count = error_count + 1;
         end
     end else begin
@@ -1302,7 +1302,7 @@ always @(posedge clk) begin
     
     if (lsu_ecl_except_ale_ls1) begin
         $display("[%0t] ALE Exception Triggered, BadAddr=0x%h", 
-                 $time, lsu_csr_except_badv_ls1);
+                 $time, lsu_ecl_except_badv_ls1);
     end
 end
 

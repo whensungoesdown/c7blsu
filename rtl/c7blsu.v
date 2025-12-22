@@ -37,7 +37,7 @@ module c7blsu(
    output                             lsu_ecl_wr_fin_ls3,
    // Exceptions: ale, bus error, ECC
    output                             lsu_ecl_except_ale_ls1,
-   output [31:0]                      lsu_csr_except_badv_ls1,
+   output [31:0]                      lsu_ecl_except_badv_ls1,
    output                             lsu_ecl_except_buserr_ls3,
    output                             lsu_ecl_except_ecc_ls3,
 
@@ -205,7 +205,7 @@ module c7blsu(
    wire lsu_ale_ls1               = am_addr_align_exc || cm_addr_align_exc;
 
    assign lsu_ecl_except_ale_ls1  = lsu_ale_ls1 & lsu_valid_ls1;
-   assign lsu_csr_except_badv_ls1 = lsu_addr_ls1;
+   assign lsu_ecl_except_badv_ls1 = lsu_addr_ls1;
 
 
    //

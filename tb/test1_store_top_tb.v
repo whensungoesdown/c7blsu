@@ -18,7 +18,7 @@ wire lsu_ecl_data_valid_ls3;
 wire [31:0] lsu_ecl_data_ls3;
 wire lsu_ecl_wr_fin_ls3;  // New signal
 wire lsu_ecl_except_ale_ls1;
-wire [31:0] lsu_csr_except_badv_ls1;
+wire [31:0] lsu_ecl_except_badv_ls1;
 wire lsu_ecl_except_buserr_ls3;
 wire lsu_ecl_except_ecc_ls3;
 
@@ -53,7 +53,7 @@ c7blsu uut (
     .lsu_ecl_data_ls3(lsu_ecl_data_ls3),
     .lsu_ecl_wr_fin_ls3(lsu_ecl_wr_fin_ls3),  // New connection
     .lsu_ecl_except_ale_ls1(lsu_ecl_except_ale_ls1),
-    .lsu_csr_except_badv_ls1(lsu_csr_except_badv_ls1),
+    .lsu_ecl_except_badv_ls1(lsu_ecl_except_badv_ls1),
     .lsu_ecl_except_buserr_ls3(lsu_ecl_except_buserr_ls3),
     .lsu_ecl_except_ecc_ls3(lsu_ecl_except_ecc_ls3),
     
@@ -1620,7 +1620,7 @@ endtask
 always @(posedge clk) begin
     // Monitor exception signals
     if (lsu_ecl_except_ale_ls1) begin
-        $display("[%0t] ALE Exception at Address: 0x%h", $time, lsu_csr_except_badv_ls1);
+        $display("[%0t] ALE Exception at Address: 0x%h", $time, lsu_ecl_except_badv_ls1);
         ale_exception = 1;
     end
     
