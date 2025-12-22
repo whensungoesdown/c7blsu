@@ -33,6 +33,8 @@ module c7blsu(
 
    output                             lsu_ecl_data_valid_ls3,
    output [31:0]                      lsu_ecl_data_ls3,
+
+   output                             lsu_ecl_wr_fin_ls3,
    // Exceptions: ale, bus error, ECC
    output                             lsu_ecl_except_ale_ls1,
    output [31:0]                      lsu_csr_except_badv_ls1,
@@ -77,7 +79,7 @@ module c7blsu(
    output [7:0]                       lsu_biu_wr_strb_ls2,
 
    input                              biu_lsu_wr_ack_ls2,
-   input                              biu_lsu_wr_done_ls3
+   input                              biu_lsu_wr_fin_ls3
 
 );
 
@@ -306,6 +308,8 @@ module c7blsu(
    assign lsu_ecl_data_ls3 = lsu_align_res_ls3;
    assign lsu_ecl_data_valid_ls3 = biu_lsu_data_valid_ls3;
 
+
+   assign lsu_ecl_wr_fin_ls3 = biu_lsu_wr_fin_ls3;
 
    //
    // registers

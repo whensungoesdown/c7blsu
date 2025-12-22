@@ -17,6 +17,7 @@ reg [31:0] ecl_lsu_wdata_e;
 // LSU Outputs
 wire lsu_ecl_data_valid_ls3;
 wire [31:0] lsu_ecl_data_ls3;
+wire lsu_ecl_wr_fin_ls3;
 wire lsu_ecl_except_ale_ls1;
 wire [31:0] lsu_csr_except_badv_ls1;
 wire lsu_ecl_except_buserr_ls3;
@@ -52,6 +53,7 @@ c7blsu dut (
     
     .lsu_ecl_data_valid_ls3(lsu_ecl_data_valid_ls3),
     .lsu_ecl_data_ls3(lsu_ecl_data_ls3),
+    .lsu_ecl_wr_fin_ls3(lsu_ecl_wr_fin_ls3),
     .lsu_ecl_except_ale_ls1(lsu_ecl_except_ale_ls1),
     .lsu_csr_except_badv_ls1(lsu_csr_except_badv_ls1),
     .lsu_ecl_except_buserr_ls3(lsu_ecl_except_buserr_ls3),
@@ -70,7 +72,7 @@ c7blsu dut (
     .lsu_biu_wr_data_ls2(),
     .lsu_biu_wr_strb_ls2(),
     .biu_lsu_wr_ack_ls2(1'b0),
-    .biu_lsu_wr_done_ls3(1'b0)
+    .biu_lsu_wr_fin_ls3(1'b0)
 );
 
 // Initialize signals
