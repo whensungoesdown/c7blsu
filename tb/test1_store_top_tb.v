@@ -16,7 +16,7 @@ reg [31:0] ecl_lsu_wdata_e;
 // LSU output signals
 wire lsu_ecl_data_valid_ls3;
 wire [31:0] lsu_ecl_data_ls3;
-wire lsu_ecl_wr_fin_ls3;  // 新增信号
+wire lsu_ecl_wr_fin_ls3;  // New signal
 wire lsu_ecl_except_ale_ls1;
 wire [31:0] lsu_csr_except_badv_ls1;
 wire lsu_ecl_except_buserr_ls3;
@@ -35,7 +35,7 @@ wire [63:0] lsu_biu_wr_data_ls2;
 wire [7:0] lsu_biu_wr_strb_ls2;
 
 reg biu_lsu_wr_ack_ls2;
-reg biu_lsu_wr_fin_ls3;  // 信号名更新
+reg biu_lsu_wr_fin_ls3;  // Signal name updated
 
 // DUT instantiation
 c7blsu uut (
@@ -51,7 +51,7 @@ c7blsu uut (
     
     .lsu_ecl_data_valid_ls3(lsu_ecl_data_valid_ls3),
     .lsu_ecl_data_ls3(lsu_ecl_data_ls3),
-    .lsu_ecl_wr_fin_ls3(lsu_ecl_wr_fin_ls3),  // 新增连接
+    .lsu_ecl_wr_fin_ls3(lsu_ecl_wr_fin_ls3),  // New connection
     .lsu_ecl_except_ale_ls1(lsu_ecl_except_ale_ls1),
     .lsu_csr_except_badv_ls1(lsu_csr_except_badv_ls1),
     .lsu_ecl_except_buserr_ls3(lsu_ecl_except_buserr_ls3),
@@ -70,7 +70,7 @@ c7blsu uut (
     .lsu_biu_wr_strb_ls2(lsu_biu_wr_strb_ls2),
     
     .biu_lsu_wr_ack_ls2(biu_lsu_wr_ack_ls2),
-    .biu_lsu_wr_fin_ls3(biu_lsu_wr_fin_ls3)  // 信号名更新
+    .biu_lsu_wr_fin_ls3(biu_lsu_wr_fin_ls3)  // Signal name updated
 );
 
 // Clock generation
@@ -110,7 +110,7 @@ initial begin
     biu_lsu_data_ls3 = 0;
     
     biu_lsu_wr_ack_ls2 = 0;
-    biu_lsu_wr_fin_ls3 = 0;  // 初始化
+    biu_lsu_wr_fin_ls3 = 0;  // Initialize
     
     test_count = 0;
     error_count = 0;
@@ -278,9 +278,11 @@ task test_byte_position_0;
         verify_wstrb_data_combination(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response_with_wr_fin();
         
-        // Display test result
+        // Display test result with detailed info
         if (local_error == 0 && wr_fin_check_error == 0) begin
-            $display("  [Test %0d] PASS", test_count);
+            $display("  [Test %0d] PASS - Addr: 0x%h, Data: 0x%h, WSTRB: 0b%b", 
+                     test_count, lsu_biu_wr_addr_ls2, 
+                     lsu_biu_wr_data_ls2[7:0], lsu_biu_wr_strb_ls2);
             test_passed = test_passed + 1;
         end else begin
             $display("  [Test %0d] FAIL", test_count);
@@ -330,9 +332,11 @@ task test_byte_position_1;
         verify_wstrb_data_combination(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response_with_wr_fin();
         
-        // Display test result
+        // Display test result with detailed info
         if (local_error == 0 && wr_fin_check_error == 0) begin
-            $display("  [Test %0d] PASS", test_count);
+            $display("  [Test %0d] PASS - Addr: 0x%h, Data: 0x%h, WSTRB: 0b%b", 
+                     test_count, lsu_biu_wr_addr_ls2, 
+                     lsu_biu_wr_data_ls2[15:8], lsu_biu_wr_strb_ls2);
             test_passed = test_passed + 1;
         end else begin
             $display("  [Test %0d] FAIL", test_count);
@@ -382,9 +386,11 @@ task test_byte_position_2;
         verify_wstrb_data_combination(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response_with_wr_fin();
         
-        // Display test result
+        // Display test result with detailed info
         if (local_error == 0 && wr_fin_check_error == 0) begin
-            $display("  [Test %0d] PASS", test_count);
+            $display("  [Test %0d] PASS - Addr: 0x%h, Data: 0x%h, WSTRB: 0b%b", 
+                     test_count, lsu_biu_wr_addr_ls2, 
+                     lsu_biu_wr_data_ls2[23:16], lsu_biu_wr_strb_ls2);
             test_passed = test_passed + 1;
         end else begin
             $display("  [Test %0d] FAIL", test_count);
@@ -434,9 +440,11 @@ task test_byte_position_3;
         verify_wstrb_data_combination(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response_with_wr_fin();
         
-        // Display test result
+        // Display test result with detailed info
         if (local_error == 0 && wr_fin_check_error == 0) begin
-            $display("  [Test %0d] PASS", test_count);
+            $display("  [Test %0d] PASS - Addr: 0x%h, Data: 0x%h, WSTRB: 0b%b", 
+                     test_count, lsu_biu_wr_addr_ls2, 
+                     lsu_biu_wr_data_ls2[31:24], lsu_biu_wr_strb_ls2);
             test_passed = test_passed + 1;
         end else begin
             $display("  [Test %0d] FAIL", test_count);
@@ -486,9 +494,11 @@ task test_byte_position_4;
         verify_wstrb_data_combination(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response_with_wr_fin();
         
-        // Display test result
+        // Display test result with detailed info
         if (local_error == 0 && wr_fin_check_error == 0) begin
-            $display("  [Test %0d] PASS", test_count);
+            $display("  [Test %0d] PASS - Addr: 0x%h, Data: 0x%h, WSTRB: 0b%b", 
+                     test_count, lsu_biu_wr_addr_ls2, 
+                     lsu_biu_wr_data_ls2[39:32], lsu_biu_wr_strb_ls2);
             test_passed = test_passed + 1;
         end else begin
             $display("  [Test %0d] FAIL", test_count);
@@ -538,9 +548,11 @@ task test_byte_position_5;
         verify_wstrb_data_combination(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response_with_wr_fin();
         
-        // Display test result
+        // Display test result with detailed info
         if (local_error == 0 && wr_fin_check_error == 0) begin
-            $display("  [Test %0d] PASS", test_count);
+            $display("  [Test %0d] PASS - Addr: 0x%h, Data: 0x%h, WSTRB: 0b%b", 
+                     test_count, lsu_biu_wr_addr_ls2, 
+                     lsu_biu_wr_data_ls2[47:40], lsu_biu_wr_strb_ls2);
             test_passed = test_passed + 1;
         end else begin
             $display("  [Test %0d] FAIL", test_count);
@@ -590,9 +602,11 @@ task test_byte_position_6;
         verify_wstrb_data_combination(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response_with_wr_fin();
         
-        // Display test result
+        // Display test result with detailed info
         if (local_error == 0 && wr_fin_check_error == 0) begin
-            $display("  [Test %0d] PASS", test_count);
+            $display("  [Test %0d] PASS - Addr: 0x%h, Data: 0x%h, WSTRB: 0b%b", 
+                     test_count, lsu_biu_wr_addr_ls2, 
+                     lsu_biu_wr_data_ls2[55:48], lsu_biu_wr_strb_ls2);
             test_passed = test_passed + 1;
         end else begin
             $display("  [Test %0d] FAIL", test_count);
@@ -642,9 +656,11 @@ task test_byte_position_7;
         verify_wstrb_data_combination(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response_with_wr_fin();
         
-        // Display test result
+        // Display test result with detailed info
         if (local_error == 0 && wr_fin_check_error == 0) begin
-            $display("  [Test %0d] PASS", test_count);
+            $display("  [Test %0d] PASS - Addr: 0x%h, Data: 0x%h, WSTRB: 0b%b", 
+                     test_count, lsu_biu_wr_addr_ls2, 
+                     lsu_biu_wr_data_ls2[63:56], lsu_biu_wr_strb_ls2);
             test_passed = test_passed + 1;
         end else begin
             $display("  [Test %0d] FAIL", test_count);
@@ -723,9 +739,11 @@ task test_sb_unaligned_example;
         verify_wstrb_data_combination(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response_with_wr_fin();
         
-        // Display test result
+        // Display test result with detailed info
         if (local_error == 0 && wr_fin_check_error == 0) begin
-            $display("  [Test %0d] PASS", test_count);
+            $display("  [Test %0d] PASS - Addr: 0x%h, Data: 0x%h, WSTRB: 0b%b", 
+                     test_count, lsu_biu_wr_addr_ls2, 
+                     lsu_biu_wr_data_ls2[31:24], lsu_biu_wr_strb_ls2);
             test_passed = test_passed + 1;
         end else begin
             $display("  [Test %0d] FAIL", test_count);
@@ -779,9 +797,11 @@ task test_sh_unaligned_example;
         verify_wstrb_data_combination(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response_with_wr_fin();
         
-        // Display test result
+        // Display test result with detailed info
         if (local_error == 0 && wr_fin_check_error == 0) begin
-            $display("  [Test %0d] PASS", test_count);
+            $display("  [Test %0d] PASS - Addr: 0x%h, Data: 0x%h, WSTRB: 0b%b", 
+                     test_count, lsu_biu_wr_addr_ls2, 
+                     lsu_biu_wr_data_ls2[23:16], lsu_biu_wr_strb_ls2);
             test_passed = test_passed + 1;
         end else begin
             $display("  [Test %0d] FAIL", test_count);
@@ -831,9 +851,10 @@ task test_sw_unaligned_example;
         ale_exception = 0;
         send_biu_response_with_wr_fin();
         
-        // Display test result
+        // Display test result with detailed info
         if (local_error == 0 && wr_fin_check_error == 0) begin
-            $display("  [Test %0d] PASS", test_count);
+            $display("  [Test %0d] PASS - Addr: 0x%h, WSTRB: 0b%b, ALE exception correctly triggered", 
+                     test_count, lsu_biu_wr_addr_ls2, lsu_biu_wr_strb_ls2);
             test_passed = test_passed + 1;
         end else begin
             $display("  [Test %0d] FAIL", test_count);
@@ -910,9 +931,11 @@ task test_sb_aligned_0;
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response_with_wr_fin();
         
-        // Display test result
+        // Display test result with detailed info
         if (local_error == 0 && wr_fin_check_error == 0) begin
-            $display("  [Test %0d] PASS", test_count);
+            $display("  [Test %0d] PASS - Addr: 0x%h, Data: 0x%h, WSTRB: 0b%b", 
+                     test_count, lsu_biu_wr_addr_ls2, 
+                     lsu_biu_wr_data_ls2[7:0], lsu_biu_wr_strb_ls2);
             test_passed = test_passed + 1;
         end else begin
             $display("  [Test %0d] FAIL", test_count);
@@ -962,9 +985,11 @@ task test_sb_aligned_4;
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response_with_wr_fin();
         
-        // Display test result
+        // Display test result with detailed info
         if (local_error == 0 && wr_fin_check_error == 0) begin
-            $display("  [Test %0d] PASS", test_count);
+            $display("  [Test %0d] PASS - Addr: 0x%h, Data: 0x%h, WSTRB: 0b%b", 
+                     test_count, lsu_biu_wr_addr_ls2, 
+                     lsu_biu_wr_data_ls2[39:32], lsu_biu_wr_strb_ls2);
             test_passed = test_passed + 1;
         end else begin
             $display("  [Test %0d] FAIL", test_count);
@@ -1013,9 +1038,11 @@ task test_sh_aligned_0;
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response_with_wr_fin();
         
-        // Display test result
+        // Display test result with detailed info
         if (local_error == 0 && wr_fin_check_error == 0) begin
-            $display("  [Test %0d] PASS", test_count);
+            $display("  [Test %0d] PASS - Addr: 0x%h, Data: 0x%h, WSTRB: 0b%b", 
+                     test_count, lsu_biu_wr_addr_ls2, 
+                     lsu_biu_wr_data_ls2[15:0], lsu_biu_wr_strb_ls2);
             test_passed = test_passed + 1;
         end else begin
             $display("  [Test %0d] FAIL", test_count);
@@ -1064,9 +1091,11 @@ task test_sh_aligned_2;
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response_with_wr_fin();
         
-        // Display test result
+        // Display test result with detailed info
         if (local_error == 0 && wr_fin_check_error == 0) begin
-            $display("  [Test %0d] PASS", test_count);
+            $display("  [Test %0d] PASS - Addr: 0x%h, Data: 0x%h, WSTRB: 0b%b", 
+                     test_count, lsu_biu_wr_addr_ls2, 
+                     lsu_biu_wr_data_ls2[31:16], lsu_biu_wr_strb_ls2);
             test_passed = test_passed + 1;
         end else begin
             $display("  [Test %0d] FAIL", test_count);
@@ -1115,9 +1144,11 @@ task test_sw_aligned_0;
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response_with_wr_fin();
         
-        // Display test result
+        // Display test result with detailed info
         if (local_error == 0 && wr_fin_check_error == 0) begin
-            $display("  [Test %0d] PASS", test_count);
+            $display("  [Test %0d] PASS - Addr: 0x%h, Data: 0x%h, WSTRB: 0b%b", 
+                     test_count, lsu_biu_wr_addr_ls2, 
+                     lsu_biu_wr_data_ls2[31:0], lsu_biu_wr_strb_ls2);
             test_passed = test_passed + 1;
         end else begin
             $display("  [Test %0d] FAIL", test_count);
@@ -1166,9 +1197,11 @@ task test_sw_aligned_4;
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response_with_wr_fin();
         
-        // Display test result
+        // Display test result with detailed info
         if (local_error == 0 && wr_fin_check_error == 0) begin
-            $display("  [Test %0d] PASS", test_count);
+            $display("  [Test %0d] PASS - Addr: 0x%h, Data: 0x%h, WSTRB: 0b%b", 
+                     test_count, lsu_biu_wr_addr_ls2, 
+                     lsu_biu_wr_data_ls2[63:32], lsu_biu_wr_strb_ls2);
             test_passed = test_passed + 1;
         end else begin
             $display("  [Test %0d] FAIL", test_count);
@@ -1243,9 +1276,11 @@ task test_32bit_boundary;
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response_with_wr_fin();
         
-        // Display test result
+        // Display test result with detailed info
         if (local_error == 0 && wr_fin_check_error == 0) begin
-            $display("  [Test %0d] PASS", test_count);
+            $display("  [Test %0d] PASS - Addr: 0x%h, Data: 0x%h, WSTRB: 0b%b", 
+                     test_count, lsu_biu_wr_addr_ls2, 
+                     lsu_biu_wr_data_ls2[31:24], lsu_biu_wr_strb_ls2);
             test_passed = test_passed + 1;
         end else begin
             $display("  [Test %0d] FAIL", test_count);
@@ -1295,9 +1330,11 @@ task test_cross_32bit_boundary;
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response_with_wr_fin();
         
-        // Display test result
+        // Display test result with detailed info
         if (local_error == 0 && wr_fin_check_error == 0) begin
-            $display("  [Test %0d] PASS", test_count);
+            $display("  [Test %0d] PASS - Addr: 0x%h, Data: 0x%h, WSTRB: 0b%b", 
+                     test_count, lsu_biu_wr_addr_ls2, 
+                     lsu_biu_wr_data_ls2[39:32], lsu_biu_wr_strb_ls2);
             test_passed = test_passed + 1;
         end else begin
             $display("  [Test %0d] FAIL", test_count);
@@ -1347,9 +1384,11 @@ task test_high_address;
         print_byte_analysis(lsu_biu_wr_strb_ls2, lsu_biu_wr_data_ls2);
         send_biu_response_with_wr_fin();
         
-        // Display test result
+        // Display test result with detailed info
         if (local_error == 0 && wr_fin_check_error == 0) begin
-            $display("  [Test %0d] PASS", test_count);
+            $display("  [Test %0d] PASS - Addr: 0x%h, Data: 0x%h, WSTRB: 0b%b", 
+                     test_count, lsu_biu_wr_addr_ls2, 
+                     lsu_biu_wr_data_ls2[63:32], lsu_biu_wr_strb_ls2);
             test_passed = test_passed + 1;
         end else begin
             $display("  [Test %0d] FAIL", test_count);
@@ -1400,8 +1439,9 @@ task test_wr_fin_signal;
         // Trigger wr_fin
         @(posedge clk);
         biu_lsu_wr_fin_ls3 = 1;
-        @(posedge clk);
         
+        // Wait one clock cycle for signal propagation
+        @(posedge clk);
         // Check if lsu_ecl_wr_fin_ls3 is high when wr_fin is asserted
         if (lsu_ecl_wr_fin_ls3 !== 1'b1) begin
             $display("  ERROR: lsu_ecl_wr_fin_ls3 should be 1 when biu_lsu_wr_fin_ls3=1");
@@ -1409,9 +1449,11 @@ task test_wr_fin_signal;
             local_error = 1;
         end
         
-        biu_lsu_wr_fin_ls3 = 0;
         @(posedge clk);
+        biu_lsu_wr_fin_ls3 = 0;
         
+        // Wait one clock cycle for signal propagation
+        @(posedge clk);
         // Check if lsu_ecl_wr_fin_ls3 goes back to low
         if (lsu_ecl_wr_fin_ls3 !== 1'b0) begin
             $display("  ERROR: lsu_ecl_wr_fin_ls3 should return to 0 after biu_lsu_wr_fin_ls3=0");
@@ -1419,11 +1461,10 @@ task test_wr_fin_signal;
         end
         
         if (local_error == 0) begin
-            $display("  WR_FIN signal test PASS");
-            $display("  lsu_ecl_wr_fin_ls3 correctly follows biu_lsu_wr_fin_ls3");
+            $display("  [Test %0d] PASS - WR_FIN signal correctly propagated", test_count);
             test_passed = test_passed + 1;
         end else begin
-            $display("  WR_FIN signal test FAIL");
+            $display("  [Test %0d] FAIL", test_count);
             test_failed = test_failed + 1;
         end
     end
@@ -1506,16 +1547,14 @@ task send_biu_response_with_wr_fin;
         biu_lsu_wr_fin_ls3 = 1;
         wr_fin_monitor_count = wr_fin_monitor_count + 1;
         $display("  [WR_FIN] biu_lsu_wr_fin_ls3 asserted at time %0t", $time);
-       
-        // 等待一个时钟周期，让信号传播	
+        
+        // Wait one clock cycle for signal propagation
         @(posedge clk);
         // Check if lsu_ecl_wr_fin_ls3 follows
         if (lsu_ecl_wr_fin_ls3 !== 1'b1) begin
             $display("  [WR_FIN ERROR] lsu_ecl_wr_fin_ls3 not asserted!");
             $display("    Expected: 1, Actual: %b", lsu_ecl_wr_fin_ls3);
             wr_fin_check_error = wr_fin_check_error + 1;
-            // lsu_ecl_wr_fin_ls3 ERROR导致测试失败
-            test_failed = test_failed + 1;
         end else begin
             $display("  [WR_FIN OK] lsu_ecl_wr_fin_ls3 correctly asserted");
         end
@@ -1523,14 +1562,13 @@ task send_biu_response_with_wr_fin;
         @(posedge clk);
         biu_lsu_wr_fin_ls3 = 0;
         
-        // Check if lsu_ecl_wr_fin_ls3 deasserts
+        // Wait one clock cycle for signal propagation
         @(posedge clk);
+        // Check if lsu_ecl_wr_fin_ls3 deasserts
         if (lsu_ecl_wr_fin_ls3 !== 1'b0) begin
             $display("  [WR_FIN ERROR] lsu_ecl_wr_fin_ls3 not deasserted!");
             $display("    Expected: 0, Actual: %b", lsu_ecl_wr_fin_ls3);
             wr_fin_check_error = wr_fin_check_error + 1;
-            // lsu_ecl_wr_fin_ls3 ERROR导致测试失败
-            test_failed = test_failed + 1;
         end else begin
             $display("  [WR_FIN OK] lsu_ecl_wr_fin_ls3 correctly deasserted");
         end
@@ -1599,7 +1637,7 @@ always @(posedge clk) begin
         $display("[%0t] Load Data Return: data=0x%h", $time, lsu_ecl_data_ls3);
     end
     
-    // Monitor wr_fin signal - 检查错误
+    // Monitor wr_fin signal - check for errors
     if (lsu_ecl_wr_fin_ls3 && !biu_lsu_wr_fin_ls3) begin
         $display("[%0t] WR_FIN ERROR: lsu_ecl_wr_fin_ls3=1 but biu_lsu_wr_fin_ls3=0", $time);
         wr_fin_check_error = wr_fin_check_error + 1;
