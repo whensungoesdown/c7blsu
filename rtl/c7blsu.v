@@ -28,8 +28,6 @@ module c7blsu(
    input  [31:0]                      ecl_lsu_base_e,
    input  [31:0]                      ecl_lsu_offset_e,
    input  [31:0]                      ecl_lsu_wdata_e,
-//   input  [4:0]                       ecl_lsu_rd_e,
-//   input                              ecl_lsu_wen_e,
 
    output                             lsu_ecl_data_valid_ls3,
    output [31:0]                      lsu_ecl_data_ls3,
@@ -91,8 +89,8 @@ module c7blsu(
    wire [31:0]        lsu_wdata_raw_ls1;
    wire [31:0]        lsu_wdata_ls1;
    wire [31:0]        lsu_wdata_ls2;
-   wire [7:0]         lsu_wstrb_ls1;
-   wire [7:0]         lsu_wstrb_ls2;
+   wire [3:0]         lsu_wstrb_ls1;
+   wire [3:0]         lsu_wstrb_ls2;
    wire [4:0]         lsu_rd_ls1;
    wire               lsu_wen_ls1;
 
@@ -166,13 +164,13 @@ module c7blsu(
                       lsu_am_sd;   
 
 
-   wire lsu_gt      = lsu_op_ls1 == `LLSU_LDGT_W || lsu_op_ls1 == `LLSU_LDGT_B || lsu_op_ls1 == `LLSU_LDGT_H || lsu_op_ls1 == `LLSU_LDGT_D ||
-                      lsu_op_ls1 == `LLSU_STGT_W || lsu_op_ls1 == `LLSU_STGT_B || lsu_op_ls1 == `LLSU_STGT_H || lsu_op_ls1 == `LLSU_STGT_D ;
-   wire lsu_le      = lsu_op_ls1 == `LLSU_LDLE_W || lsu_op_ls1 == `LLSU_LDLE_B || lsu_op_ls1 == `LLSU_LDLE_H || lsu_op_ls1 == `LLSU_LDLE_D ||
-                      lsu_op_ls1 == `LLSU_STLE_W || lsu_op_ls1 == `LLSU_STLE_B || lsu_op_ls1 == `LLSU_STLE_H || lsu_op_ls1 == `LLSU_STLE_D ;
-   wire lsu_idle    = lsu_op_ls1 == `LLSU_IDLE;
-
-   wire prefetch    = lsu_op_ls1 == `LLSU_PRELD || lsu_op_ls1 == `LLSU_PRELDX;
+//   wire lsu_gt      = lsu_op_ls1 == `LLSU_LDGT_W || lsu_op_ls1 == `LLSU_LDGT_B || lsu_op_ls1 == `LLSU_LDGT_H || lsu_op_ls1 == `LLSU_LDGT_D ||
+//                      lsu_op_ls1 == `LLSU_STGT_W || lsu_op_ls1 == `LLSU_STGT_B || lsu_op_ls1 == `LLSU_STGT_H || lsu_op_ls1 == `LLSU_STGT_D ;
+//   wire lsu_le      = lsu_op_ls1 == `LLSU_LDLE_W || lsu_op_ls1 == `LLSU_LDLE_B || lsu_op_ls1 == `LLSU_LDLE_H || lsu_op_ls1 == `LLSU_LDLE_D ||
+//                      lsu_op_ls1 == `LLSU_STLE_W || lsu_op_ls1 == `LLSU_STLE_B || lsu_op_ls1 == `LLSU_STLE_H || lsu_op_ls1 == `LLSU_STLE_D ;
+//   wire lsu_idle    = lsu_op_ls1 == `LLSU_IDLE;
+//
+//   wire prefetch    = lsu_op_ls1 == `LLSU_PRELD || lsu_op_ls1 == `LLSU_PRELDX;
 
 
    //wire lsu_wr      = lsu_sw || lsu_sb || lsu_sh || lsu_scw || lsu_scd || lsu_sd;
@@ -411,7 +409,7 @@ module c7blsu(
       .q   (lsu_wdata_ls2),
       .se(), .si(), .so());
 
-   dff_s #(8) lsu_wstrb_ls2_reg (
+   dff_s #(4) lsu_wstrb_ls2_reg (
       .din (lsu_wstrb_ls1),
       .clk (clk),
       .q   (lsu_wstrb_ls2),
