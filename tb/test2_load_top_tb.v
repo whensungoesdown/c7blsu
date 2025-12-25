@@ -1,6 +1,6 @@
 `timescale 1ns/1ns
 
-`include "decode.vh"
+`include "c7blsu_defs.v"
 
 module top_tb();
 

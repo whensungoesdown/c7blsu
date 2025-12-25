@@ -1,4 +1,4 @@
-`include "decode.vh"
+`include "c7blsu_defs.v"
 
 //
 // The ECL interface signals are pulsed for a single cycle by ECL and must
