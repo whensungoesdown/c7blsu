@@ -255,12 +255,12 @@ module c7blsu(
 
    assign biu_rd_req_in = (biu_rd_req_q & ~biu_lsu_rd_ack_ls2) | (lsu_valid_ls2 & lsu_load_ls2);
 
-   dffrl_s #(1) biu_rd_req_reg (
+   dffrl_ns #(1) biu_rd_req_reg (
       .din   (biu_rd_req_in),
       .clk   (clk),
       .rst_l (resetn),
-      .q     (biu_rd_req_q),
-      .se(), .si(), .so());
+      .q     (biu_rd_req_q));
+      //.se(), .si(), .so());
 
    assign lsu_biu_rd_req_ls2 = biu_rd_req_q;
 
@@ -281,12 +281,12 @@ module c7blsu(
 
    assign biu_wr_req_in = (biu_wr_req_q & ~biu_lsu_wr_ack_ls2) | (lsu_valid_ls2 & lsu_store_ls2);
 
-   dffrl_s #(1) biu_wr_req_reg (
+   dffrl_ns #(1) biu_wr_req_reg (
       .din   (biu_wr_req_in),
       .clk   (clk),
       .rst_l (resetn),
-      .q     (biu_wr_req_q),
-      .se(), .si(), .so());
+      .q     (biu_wr_req_q));
+      //.se(), .si(), .so());
 
    assign lsu_biu_wr_req_ls2 = biu_wr_req_q;
 
@@ -354,66 +354,66 @@ module c7blsu(
    //
    // The signal lsu_valid_ls1 is cleared and refreshed after a request is
    // served (by BIU, STB, or DCACHE) or aborted (e.g., due to an ALE in ls1).
-   dffrl_s #(1) lsu_valid_ls1_reg (
+   dffrl_ns #(1) lsu_valid_ls1_reg (
       .din (ecl_lsu_valid_e),
       // lsu_ecl_except_buserr_ls3 lsu_ecl_except_ecc_ls3 should also go here 
       //.en  (ecl_lsu_valid_e | lsu_ecl_data_valid_ls3 | lsu_ale_ls1),
       .clk (clk),
       .rst_l (resetn),
-      .q   (lsu_valid_ls1),
-      .se(), .si(), .so());
+      .q   (lsu_valid_ls1));
+      //.se(), .si(), .so());
 
    // If ale occurs at ls1, it invalidates lsu_valid_ls2 and cancels
    // subsequent lsu_biu_rd_req_ls2
-   dffrl_s #(1) lsu_valid_ls2_reg (
+   dffrl_ns #(1) lsu_valid_ls2_reg (
       .din (lsu_valid_ls1 & ~lsu_ale_ls1),
       .clk (clk),
       .rst_l (resetn),
-      .q   (lsu_valid_ls2),
-      .se(), .si(), .so());
+      .q   (lsu_valid_ls2));
+      //.se(), .si(), .so());
 
    // lsu_valid_ls3 
   
 
-   dffe_s #(7) lsu_op_ls1_reg (
+   dffe_ns #(7) lsu_op_ls1_reg (
       .din (ecl_lsu_op_e),
       .en  (ecl_lsu_valid_e),
       .clk (clk),
-      .q   (lsu_op_ls1),
-      .se(), .si(), .so());
+      .q   (lsu_op_ls1));
+      //.se(), .si(), .so());
 
-   dffe_s #(32) lsu_base_ls1_reg (
+   dffe_ns #(32) lsu_base_ls1_reg (
       .din (ecl_lsu_base_e),
       .en  (ecl_lsu_valid_e),
       .clk (clk),
-      .q   (lsu_base_ls1),
-      .se(), .si(), .so());
+      .q   (lsu_base_ls1));
+      //.se(), .si(), .so());
 
-   dffe_s #(32) lsu_offset_ls1_reg (
+   dffe_ns #(32) lsu_offset_ls1_reg (
       .din (ecl_lsu_offset_e),
       .en  (ecl_lsu_valid_e),
       .clk (clk),
-      .q   (lsu_offset_ls1),
-      .se(), .si(), .so());
+      .q   (lsu_offset_ls1));
+      //.se(), .si(), .so());
 
-   dffe_s #(32) lsu_wdata_raw_ls1_reg (
+   dffe_ns #(32) lsu_wdata_raw_ls1_reg (
       .din (ecl_lsu_wdata_e),
       .en  (ecl_lsu_valid_e),
       .clk (clk),
-      .q   (lsu_wdata_raw_ls1),
-      .se(), .si(), .so());
+      .q   (lsu_wdata_raw_ls1));
+      //.se(), .si(), .so());
 
-   dff_s #(32) lsu_wdata_ls2_reg (
+   dff_ns #(32) lsu_wdata_ls2_reg (
       .din (lsu_wdata_ls1),
       .clk (clk),
-      .q   (lsu_wdata_ls2),
-      .se(), .si(), .so());
+      .q   (lsu_wdata_ls2));
+      //.se(), .si(), .so());
 
-   dff_s #(4) lsu_wstrb_ls2_reg (
+   dff_ns #(4) lsu_wstrb_ls2_reg (
       .din (lsu_wstrb_ls1),
       .clk (clk),
-      .q   (lsu_wstrb_ls2),
-      .se(), .si(), .so());
+      .q   (lsu_wstrb_ls2));
+      //.se(), .si(), .so());
 
    // The load instruction's destination register and wen should not be
    // managed by the LSU.
@@ -441,11 +441,11 @@ module c7blsu(
    // signals because the data flows sequentially between them. Since the core
    // is stalled for the core is stalled for the duration of this pipeline,
    // the register values are preserved.
-   dff_s #(5) lsu_align_mode_ls2_reg (
+   dff_ns #(5) lsu_align_mode_ls2_reg (
       .din (lsu_align_mode_ls1),
       .clk (clk),
-      .q   (lsu_align_mode_ls2),
-      .se(), .si(), .so());
+      .q   (lsu_align_mode_ls2));
+      //.se(), .si(), .so());
 
    // The memory read request is issued in LS2 via lsu_biu_rd_req_ls2. The
    // BIU's response time is variable, acknowledgment via biu_lsu_rd_ack_ls2
@@ -458,50 +458,50 @@ module c7blsu(
    // LS2, LS3) simultaneously.
    // The current LSU pipeline is implemented for a single request at a time.
 
-   dffe_s #(5) lsu_align_mode_ls3_reg (
+   dffe_ns #(5) lsu_align_mode_ls3_reg (
       .din (lsu_align_mode_ls2),
       .clk (clk),
       .en  (biu_lsu_rd_ack_ls2),
-      .q   (lsu_align_mode_ls3),
-      .se(), .si(), .so());
+      .q   (lsu_align_mode_ls3));
+      //.se(), .si(), .so());
 
-   dff_s #(3) lsu_shift_ls2_reg (
+   dff_ns #(3) lsu_shift_ls2_reg (
       .din (lsu_shift_ls1),
       .clk (clk),
-      .q   (lsu_shift_ls2),
-      .se(), .si(), .so());
+      .q   (lsu_shift_ls2));
+      //.se(), .si(), .so());
 
-   dffe_s #(3) lsu_shift_ls3_reg (
+   dffe_ns #(3) lsu_shift_ls3_reg (
       .din (lsu_shift_ls2),
       .clk (clk),
       .en  (biu_lsu_rd_ack_ls2),
-      .q   (lsu_shift_ls3),
-      .se(), .si(), .so());
+      .q   (lsu_shift_ls3));
+      //.se(), .si(), .so());
 
-   dff_s #(1) lsu_load_ls2_reg (
+   dff_ns #(1) lsu_load_ls2_reg (
       .din (lsu_load_ls1),
       .clk (clk),
-      .q   (lsu_load_ls2),
-      .se(), .si(), .so());
+      .q   (lsu_load_ls2));
+      //.se(), .si(), .so());
 
-   dff_s #(1) lsu_store_ls2_reg (
+   dff_ns #(1) lsu_store_ls2_reg (
       .din (lsu_store_ls1),
       .clk (clk),
-      .q   (lsu_store_ls2),
-      .se(), .si(), .so());
+      .q   (lsu_store_ls2));
+      //.se(), .si(), .so());
 
-   dff_s #(32) lsu_addr_ls2_reg (
+   dff_ns #(32) lsu_addr_ls2_reg (
       .din (lsu_addr_ls1),
       .clk (clk),
-      .q   (lsu_addr_ls2),
-      .se(), .si(), .so());
+      .q   (lsu_addr_ls2));
+      //.se(), .si(), .so());
 
-   dffe_s #(32) lsu_addr_ls3_reg (
+   dffe_ns #(32) lsu_addr_ls3_reg (
       .din (lsu_addr_ls2),
       .clk (clk),
       .en  (biu_lsu_rd_ack_ls2),
-      .q   (lsu_addr_ls3),
-      .se(), .si(), .so());
+      .q   (lsu_addr_ls3));
+      //.se(), .si(), .so());
 
    // Note: The pipeline registers _ls2 and _ls3 are functionally redundant.
    // Because the core stalls for load/store instructions, resuling in only
