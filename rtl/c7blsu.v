@@ -16,28 +16,28 @@
 // before proceeding to the BIU.
 
 module c7blsu(
-   input                              clk,
-   input                              resetn,
+   input              clk,
+   input              resetn,
 
    //--------------------------------------------------
    // ECL Interface
    //--------------------------------------------------
    
-   input                              ecl_lsu_valid_e,
-   input  [6:0]                       ecl_lsu_op_e,
-   input  [31:0]                      ecl_lsu_base_e,
-   input  [31:0]                      ecl_lsu_offset_e,
-   input  [31:0]                      ecl_lsu_wdata_e,
+   input              ecl_lsu_valid_e,
+   input  [6:0]       ecl_lsu_op_e,
+   input  [31:0]      ecl_lsu_base_e,
+   input  [31:0]      ecl_lsu_offset_e,
+   input  [31:0]      ecl_lsu_wdata_e,
 
-   output                             lsu_ecl_data_valid_ls3,
-   output [31:0]                      lsu_ecl_data_ls3,
+   output             lsu_ecl_data_valid_ls3,
+   output [31:0]      lsu_ecl_data_ls3,
 
-   output                             lsu_ecl_wr_fin_ls3,
+   output             lsu_ecl_wr_fin_ls3,
    // Exceptions: ale, bus error, ECC
-   output                             lsu_ecl_except_ale_ls1,
-   output [31:0]                      lsu_ecl_except_badv_ls1,
-   output                             lsu_ecl_except_buserr_ls3,
-   output                             lsu_ecl_except_ecc_ls3,
+   output             lsu_ecl_except_ale_ls1,
+   output [31:0]      lsu_ecl_except_badv_ls1,
+   output             lsu_ecl_except_buserr_ls3,
+   output             lsu_ecl_except_ecc_ls3,
 
    //--------------------------------------------------
    // STB Interface
@@ -64,20 +64,20 @@ module c7blsu(
    //--------------------------------------------------
 
    // BIU rd
-   output                             lsu_biu_rd_req_ls2,
-   output [31:0]                      lsu_biu_rd_addr_ls2,
-   input                              biu_lsu_rd_ack_ls2,
-   input                              biu_lsu_data_valid_ls3,
-   input  [63:0]                      biu_lsu_data_ls3,
+   output             lsu_biu_rd_req_ls2,
+   output [31:0]      lsu_biu_rd_addr_ls2,
+   input              biu_lsu_rd_ack_ls2,
+   input              biu_lsu_data_valid_ls3,
+   input  [63:0]      biu_lsu_data_ls3,
 
    // BIU wr
-   output                             lsu_biu_wr_req_ls2,
-   output [31:0]                      lsu_biu_wr_addr_ls2,
-   output [63:0]                      lsu_biu_wr_data_ls2,
-   output [7:0]                       lsu_biu_wr_strb_ls2,
+   output             lsu_biu_wr_req_ls2,
+   output [31:0]      lsu_biu_wr_addr_ls2,
+   output [63:0]      lsu_biu_wr_data_ls2,
+   output [7:0]       lsu_biu_wr_strb_ls2,
 
-   input                              biu_lsu_wr_ack_ls2,
-   input                              biu_lsu_wr_fin_ls3
+   input              biu_lsu_wr_ack_ls2,
+   input              biu_lsu_wr_fin_ls3
 
 );
 
