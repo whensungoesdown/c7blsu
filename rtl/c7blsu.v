@@ -343,6 +343,11 @@ module c7blsu(
 
    assign lsu_ecl_wr_fin_ls3 = biu_lsu_wr_fin_ls3;
 
+   assign lsu_valid_ls1 = ecl_lsu_valid_e;
+   assign lsu_op_ls1 = ecl_lsu_op_e;
+   assign lsu_base_ls1 = ecl_lsu_base_e;
+   assign lsu_offset_ls1 = ecl_lsu_offset_e;
+
    //
    // registers
    //
@@ -354,14 +359,14 @@ module c7blsu(
    //
    // The signal lsu_valid_ls1 is cleared and refreshed after a request is
    // served (by BIU, STB, or DCACHE) or aborted (e.g., due to an ALE in ls1).
-   dffrl_ns #(1) lsu_valid_ls1_reg (
-      .din (ecl_lsu_valid_e),
-      // lsu_ecl_except_buserr_ls3 lsu_ecl_except_ecc_ls3 should also go here 
-      //.en  (ecl_lsu_valid_e | lsu_ecl_data_valid_ls3 | lsu_ale_ls1),
-      .clk (clk),
-      .rst_l (resetn),
-      .q   (lsu_valid_ls1));
-      //.se(), .si(), .so());
+//   dffrl_ns #(1) lsu_valid_ls1_reg (
+//      .din (ecl_lsu_valid_e),
+//      // lsu_ecl_except_buserr_ls3 lsu_ecl_except_ecc_ls3 should also go here 
+//      //.en  (ecl_lsu_valid_e | lsu_ecl_data_valid_ls3 | lsu_ale_ls1),
+//      .clk (clk),
+//      .rst_l (resetn),
+//      .q   (lsu_valid_ls1));
+//      //.se(), .si(), .so());
 
    // If ale occurs at ls1, it invalidates lsu_valid_ls2 and cancels
    // subsequent lsu_biu_rd_req_ls2
@@ -375,43 +380,45 @@ module c7blsu(
    // lsu_valid_ls3 
   
 
-   dffe_ns #(7) lsu_op_ls1_reg (
-      .din (ecl_lsu_op_e),
-      .en  (ecl_lsu_valid_e),
-      .clk (clk),
-      .q   (lsu_op_ls1));
-      //.se(), .si(), .so());
+//   dffe_ns #(7) lsu_op_ls1_reg (
+//      .din (ecl_lsu_op_e),
+//      .en  (ecl_lsu_valid_e),
+//      .clk (clk),
+//      .q   (lsu_op_ls1));
+//      //.se(), .si(), .so());
+//
+//   dffe_ns #(32) lsu_base_ls1_reg (
+//      .din (ecl_lsu_base_e),
+//      .en  (ecl_lsu_valid_e),
+//      .clk (clk),
+//      .q   (lsu_base_ls1));
+//      //.se(), .si(), .so());
+//
+//   dffe_ns #(32) lsu_offset_ls1_reg (
+//      .din (ecl_lsu_offset_e),
+//      .en  (ecl_lsu_valid_e),
+//      .clk (clk),
+//      .q   (lsu_offset_ls1));
+//      //.se(), .si(), .so());
+//
+//   dffe_ns #(32) lsu_wdata_raw_ls1_reg (
+//      .din (ecl_lsu_wdata_e),
+//      .en  (ecl_lsu_valid_e),
+//      .clk (clk),
+//      .q   (lsu_wdata_raw_ls1));
+//      //.se(), .si(), .so());
 
-   dffe_ns #(32) lsu_base_ls1_reg (
-      .din (ecl_lsu_base_e),
-      .en  (ecl_lsu_valid_e),
-      .clk (clk),
-      .q   (lsu_base_ls1));
-      //.se(), .si(), .so());
-
-   dffe_ns #(32) lsu_offset_ls1_reg (
-      .din (ecl_lsu_offset_e),
-      .en  (ecl_lsu_valid_e),
-      .clk (clk),
-      .q   (lsu_offset_ls1));
-      //.se(), .si(), .so());
-
-   dffe_ns #(32) lsu_wdata_raw_ls1_reg (
-      .din (ecl_lsu_wdata_e),
-      .en  (ecl_lsu_valid_e),
-      .clk (clk),
-      .q   (lsu_wdata_raw_ls1));
-      //.se(), .si(), .so());
-
-   dff_ns #(32) lsu_wdata_ls2_reg (
+   dffe_ns #(32) lsu_wdata_ls2_reg (
       .din (lsu_wdata_ls1),
       .clk (clk),
+      .en  (lsu_valid_ls1),
       .q   (lsu_wdata_ls2));
       //.se(), .si(), .so());
 
-   dff_ns #(4) lsu_wstrb_ls2_reg (
+   dffe_ns #(4) lsu_wstrb_ls2_reg (
       .din (lsu_wstrb_ls1),
       .clk (clk),
+      .en  (lsu_valid_ls1),
       .q   (lsu_wstrb_ls2));
       //.se(), .si(), .so());
 
@@ -441,9 +448,10 @@ module c7blsu(
    // signals because the data flows sequentially between them. Since the core
    // is stalled for the core is stalled for the duration of this pipeline,
    // the register values are preserved.
-   dff_ns #(5) lsu_align_mode_ls2_reg (
+   dffe_ns #(5) lsu_align_mode_ls2_reg (
       .din (lsu_align_mode_ls1),
       .clk (clk),
+      .en  (lsu_valid_ls1),
       .q   (lsu_align_mode_ls2));
       //.se(), .si(), .so());
 
@@ -465,9 +473,10 @@ module c7blsu(
       .q   (lsu_align_mode_ls3));
       //.se(), .si(), .so());
 
-   dff_ns #(3) lsu_shift_ls2_reg (
+   dffe_ns #(3) lsu_shift_ls2_reg (
       .din (lsu_shift_ls1),
       .clk (clk),
+      .en  (lsu_valid_ls1),
       .q   (lsu_shift_ls2));
       //.se(), .si(), .so());
 
@@ -478,21 +487,24 @@ module c7blsu(
       .q   (lsu_shift_ls3));
       //.se(), .si(), .so());
 
-   dff_ns #(1) lsu_load_ls2_reg (
+   dffe_ns #(1) lsu_load_ls2_reg (
       .din (lsu_load_ls1),
       .clk (clk),
+      .en  (lsu_valid_ls1),
       .q   (lsu_load_ls2));
       //.se(), .si(), .so());
 
-   dff_ns #(1) lsu_store_ls2_reg (
+   dffe_ns #(1) lsu_store_ls2_reg (
       .din (lsu_store_ls1),
       .clk (clk),
+      .en  (lsu_valid_ls1),
       .q   (lsu_store_ls2));
       //.se(), .si(), .so());
 
-   dff_ns #(32) lsu_addr_ls2_reg (
+   dffe_ns #(32) lsu_addr_ls2_reg (
       .din (lsu_addr_ls1),
       .clk (clk),
+      .en  (lsu_valid_ls1),
       .q   (lsu_addr_ls2));
       //.se(), .si(), .so());
 
