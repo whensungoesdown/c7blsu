@@ -347,6 +347,7 @@ module c7blsu(
    assign lsu_op_ls1 = ecl_lsu_op_e;
    assign lsu_base_ls1 = ecl_lsu_base_e;
    assign lsu_offset_ls1 = ecl_lsu_offset_e;
+   assign lsu_wdata_raw_ls1 = ecl_lsu_wdata_e;
 
    //
    // registers
