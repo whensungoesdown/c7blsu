@@ -256,7 +256,7 @@ begin
     ecl_lsu_valid_e = 0;
     
     // Wait for ALE in LS1 stage (1 cycle after E stage)
-    @(posedge clk); // Wait for LS1 stage
+    //@(posedge clk); // Wait for LS1 stage
     
     // Check ALE in LS1 stage
     if (lsu_ecl_except_ale_ls1) begin
@@ -1095,7 +1095,7 @@ begin
     ecl_lsu_valid_e = 0;
     
     // Wait for ALE in LS1 stage (1 cycle after E stage)
-    @(posedge clk); // Wait for LS1 stage
+    //@(posedge clk); // Wait for LS1 stage
     
     // Check ALE in LS1 stage
     if (lsu_ecl_except_ale_ls1) begin

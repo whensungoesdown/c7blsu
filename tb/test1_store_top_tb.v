@@ -130,7 +130,7 @@ initial begin
     $display("========================================\n");
     $display("Testing with updated c7blsu.v interface");
     $display("biu_lsu_wr_fin_ls3 (WR_FIN) signal test included");
-    $display("lsu_ecl_wr_fin_ls3 ERROR will cause test FAIL");
+    $display("lsu_ecl_wr_fin_ls3 ERROR will cause test fail");
     $display("========================================\n");
     
     // Test Group 1: WSTRB for All Byte Positions
