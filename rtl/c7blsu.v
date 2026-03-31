@@ -264,7 +264,8 @@ module c7blsu(
 
    assign lsu_biu_rd_req_ls2 = biu_rd_req_q;
 
-   assign lsu_biu_rd_addr_ls2 = {lsu_addr_ls2[31:3], 3'b000}; // 64-bit align
+   //assign lsu_biu_rd_addr_ls2 = {lsu_addr_ls2[31:3], 3'b000}; // 64-bit align
+   assign lsu_biu_rd_addr_ls2 = lsu_addr_ls2;
 
    //
    // BIU write request 
@@ -290,7 +291,8 @@ module c7blsu(
 
    assign lsu_biu_wr_req_ls2 = biu_wr_req_q;
 
-   assign lsu_biu_wr_addr_ls2 = {lsu_addr_ls2[31:3], 3'b000}; // 64-bit align
+   //assign lsu_biu_wr_addr_ls2 = {lsu_addr_ls2[31:3], 3'b000}; // 64-bit align
+   assign lsu_biu_wr_addr_ls2 = lsu_addr_ls2;
 
 
 
