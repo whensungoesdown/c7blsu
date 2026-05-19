@@ -16,11 +16,12 @@ reg [31:0] ecl_lsu_wdata_e;
 // LSU output signals
 wire lsu_ecl_data_valid_ls3;
 wire [31:0] lsu_ecl_data_ls3;
-wire lsu_ecl_wr_fin_ls3;  // New signal
+wire lsu_ecl_wr_fin_ls3;
 wire lsu_ecl_except_ale_ls1;
 wire [31:0] lsu_ecl_except_badv_ls1;
 wire lsu_ecl_except_buserr_ls3;
 wire lsu_ecl_except_ecc_ls3;
+wire [31:0] lsu_ecl_except_buserr_badv_ls3;  //新增
 
 // BIU interface
 wire lsu_biu_rd_req_ls2;
@@ -28,6 +29,8 @@ wire [31:0] lsu_biu_rd_addr_ls2;
 reg biu_lsu_rd_ack_ls2;
 reg biu_lsu_data_valid_ls3;
 reg [63:0] biu_lsu_data_ls3;
+reg biu_lsu_fault_ls3;           //新增
+reg [1:0] biu_lsu_fault_code_ls3; //新增
 
 wire lsu_biu_wr_req_ls2;
 wire [31:0] lsu_biu_wr_addr_ls2;
@@ -35,7 +38,9 @@ wire [63:0] lsu_biu_wr_data_ls2;
 wire [7:0] lsu_biu_wr_strb_ls2;
 
 reg biu_lsu_wr_ack_ls2;
-reg biu_lsu_wr_fin_ls3;  // Signal name updated
+reg biu_lsu_wr_fin_ls3;
+reg biu_lsu_wr_fault_ls3;        //新增
+reg [1:0] biu_lsu_wr_fault_code_ls3; //新增
 
 // DUT instantiation
 c7blsu uut (
@@ -51,11 +56,12 @@ c7blsu uut (
     
     .lsu_ecl_data_valid_ls3(lsu_ecl_data_valid_ls3),
     .lsu_ecl_data_ls3(lsu_ecl_data_ls3),
-    .lsu_ecl_wr_fin_ls3(lsu_ecl_wr_fin_ls3),  // New connection
+    .lsu_ecl_wr_fin_ls3(lsu_ecl_wr_fin_ls3),
     .lsu_ecl_except_ale_ls1(lsu_ecl_except_ale_ls1),
-    .lsu_ecl_except_badv_ls1(lsu_ecl_except_badv_ls1),
+    .lsu_ecl_except_ale_badv_ls1(lsu_ecl_except_badv_ls1),
     .lsu_ecl_except_buserr_ls3(lsu_ecl_except_buserr_ls3),
     .lsu_ecl_except_ecc_ls3(lsu_ecl_except_ecc_ls3),
+    .lsu_ecl_except_buserr_badv_ls3(lsu_ecl_except_buserr_badv_ls3), //新增
     
     // BIU interface
     .lsu_biu_rd_req_ls2(lsu_biu_rd_req_ls2),
@@ -63,6 +69,8 @@ c7blsu uut (
     .biu_lsu_rd_ack_ls2(biu_lsu_rd_ack_ls2),
     .biu_lsu_data_valid_ls3(biu_lsu_data_valid_ls3),
     .biu_lsu_data_ls3(biu_lsu_data_ls3),
+    .biu_lsu_fault_ls3(biu_lsu_fault_ls3),                 //新增
+    .biu_lsu_fault_code_ls3(biu_lsu_fault_code_ls3),       //新增
     
     .lsu_biu_wr_req_ls2(lsu_biu_wr_req_ls2),
     .lsu_biu_wr_addr_ls2(lsu_biu_wr_addr_ls2),
@@ -70,7 +78,9 @@ c7blsu uut (
     .lsu_biu_wr_strb_ls2(lsu_biu_wr_strb_ls2),
     
     .biu_lsu_wr_ack_ls2(biu_lsu_wr_ack_ls2),
-    .biu_lsu_wr_fin_ls3(biu_lsu_wr_fin_ls3)  // Signal name updated
+    .biu_lsu_wr_fin_ls3(biu_lsu_wr_fin_ls3),
+    .biu_lsu_wr_fault_ls3(biu_lsu_wr_fault_ls3),           //新增
+    .biu_lsu_wr_fault_code_ls3(biu_lsu_wr_fault_code_ls3)  //新增
 );
 
 // Clock generation
@@ -108,9 +118,13 @@ initial begin
     biu_lsu_rd_ack_ls2 = 0;
     biu_lsu_data_valid_ls3 = 0;
     biu_lsu_data_ls3 = 0;
+    biu_lsu_fault_ls3 = 0;           //新增
+    biu_lsu_fault_code_ls3 = 0;       //新增
     
     biu_lsu_wr_ack_ls2 = 0;
-    biu_lsu_wr_fin_ls3 = 0;  // Initialize
+    biu_lsu_wr_fin_ls3 = 0;
+    biu_lsu_wr_fault_ls3 = 0;         //新增
+    biu_lsu_wr_fault_code_ls3 = 0;     //新增
     
     test_count = 0;
     error_count = 0;
