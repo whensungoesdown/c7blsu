@@ -530,7 +530,8 @@ module c7blsu(
 
 
    assign lsu_ecl_except_buserr_ls3 = biu_lsu_fault_ls3 | biu_lsu_wr_fault_ls3;
-   assign lsu_ecl_except_buserr_badv_ls3 = lsu_addr_ls3;
+   assign lsu_ecl_except_buserr_badv_ls3 = biu_lsu_fault_ls3 ? lsu_addr_ls3 : lsu_addr_ls2;
+   //assign lsu_ecl_except_buserr_badv_ls3 = lsu_addr_ls2; // it is fine to use lsu_addr_ls2
 
    // Unimplmented signals
    assign lsu_ecl_except_ecc_ls3 = 1'b0;
