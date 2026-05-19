@@ -35,9 +35,10 @@ module c7blsu(
    output             lsu_ecl_wr_fin_ls3,
    // Exceptions: ale, bus error, ECC
    output             lsu_ecl_except_ale_ls1,
-   output [31:0]      lsu_ecl_except_badv_ls1,
+   output [31:0]      lsu_ecl_except_ale_badv_ls1,
    output             lsu_ecl_except_buserr_ls3,
    output             lsu_ecl_except_ecc_ls3,
+   output [31:0]      lsu_ecl_except_buserr_badv_ls3,
 
    //--------------------------------------------------
    // STB Interface
@@ -69,6 +70,8 @@ module c7blsu(
    input              biu_lsu_rd_ack_ls2,
    input              biu_lsu_data_valid_ls3,
    input  [63:0]      biu_lsu_data_ls3,
+   input              biu_lsu_fault_ls3,
+   input  [1:0]       biu_lsu_fault_code_ls3,
 
    // BIU wr
    output             lsu_biu_wr_req_ls2,
@@ -77,8 +80,9 @@ module c7blsu(
    output [7:0]       lsu_biu_wr_strb_ls2,
 
    input              biu_lsu_wr_ack_ls2,
-   input              biu_lsu_wr_fin_ls3
-
+   input              biu_lsu_wr_fin_ls3,
+   input              biu_lsu_wr_fault_ls3,
+   input  [1:0]       biu_lsu_wr_fault_code_ls3
 );
 
    wire               lsu_valid_ls1;
@@ -203,7 +207,7 @@ module c7blsu(
    wire lsu_ale_ls1               = am_addr_align_exc || cm_addr_align_exc;
 
    assign lsu_ecl_except_ale_ls1  = lsu_ale_ls1 & lsu_valid_ls1;
-   assign lsu_ecl_except_badv_ls1 = lsu_addr_ls1;
+   assign lsu_ecl_except_ale_badv_ls1 = lsu_addr_ls1;
 
 
    //
@@ -525,8 +529,10 @@ module c7blsu(
    // design for clarity and to maintain flexibility for future modifications.
 
 
+   assign lsu_ecl_except_buserr_ls3 = biu_lsu_fault_ls3 | biu_lsu_wr_fault_ls3;
+   assign lsu_ecl_except_buserr_badv_ls3 = lsu_addr_ls3;
+
    // Unimplmented signals
-   assign lsu_ecl_except_buserr_ls3 = 1'b0;
    assign lsu_ecl_except_ecc_ls3 = 1'b0;
 
 endmodule
