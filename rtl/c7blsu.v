@@ -24,6 +24,8 @@ module c7blsu(
    //--------------------------------------------------
    
    input              ecl_lsu_valid_e,
+   input              ecl_lsu_ibar_e,
+   input              ecl_lsu_dbar_e,
    input  [6:0]       ecl_lsu_op_e,
    input  [31:0]      ecl_lsu_base_e,
    input  [31:0]      ecl_lsu_offset_e,
@@ -39,6 +41,9 @@ module c7blsu(
    output             lsu_ecl_except_buserr_ls3,
    output             lsu_ecl_except_ecc_ls3,
    output [31:0]      lsu_ecl_except_buserr_badv_ls3,
+
+   output             lsu_ecl_ibar_fin, 
+   output             lsu_ecl_dbar_fin, 
 
    //--------------------------------------------------
    // STB Interface
@@ -105,6 +110,10 @@ module c7blsu(
 
    wire [31:0]        lsu_addr_ls2;
    wire [31:0]        lsu_addr_ls3;
+
+
+   wire lsu_dbar_ls1 = ecl_lsu_ibar_e;
+   wire lsu_ibar_ls1 = ecl_lsu_dbar_e;
 
    // decode atomic op
    wire lsu_am_lw   = lsu_op_ls1 == `LLSU_AMSWAP_W    || lsu_op_ls1 == `LLSU_AMADD_W     ||
@@ -208,6 +217,10 @@ module c7blsu(
 
    assign lsu_ecl_except_ale_ls1  = lsu_ale_ls1 & lsu_valid_ls1;
    assign lsu_ecl_except_ale_badv_ls1 = lsu_addr_ls1;
+
+
+   assign lsu_ecl_ibar_fin = lsu_ibar_ls1 & lsu_valid_ls1;
+   assign lsu_ecl_dbar_fin = lsu_dbar_ls1 & lsu_valid_ls1;
 
 
    //

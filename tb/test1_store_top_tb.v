@@ -8,6 +8,8 @@ reg resetn;
 
 // ECL interface signals
 reg ecl_lsu_valid_e;
+reg ecl_lsu_ibar_e;          // NEW: ibar input
+reg ecl_lsu_dbar_e;          // NEW: dbar input
 reg [6:0] ecl_lsu_op_e;
 reg [31:0] ecl_lsu_base_e;
 reg [31:0] ecl_lsu_offset_e;
@@ -22,6 +24,10 @@ wire [31:0] lsu_ecl_except_badv_ls1;
 wire lsu_ecl_except_buserr_ls3;
 wire lsu_ecl_except_ecc_ls3;
 wire [31:0] lsu_ecl_except_buserr_badv_ls3;  //新增
+
+// New output signals for ibar/dbar
+wire lsu_ecl_ibar_fin;        // NEW: ibar finish
+wire lsu_ecl_dbar_fin;        // NEW: dbar finish
 
 // BIU interface
 wire lsu_biu_rd_req_ls2;
@@ -49,6 +55,8 @@ c7blsu uut (
     
     // ECL interface
     .ecl_lsu_valid_e(ecl_lsu_valid_e),
+    .ecl_lsu_ibar_e(ecl_lsu_ibar_e),       // NEW: connected, always 0
+    .ecl_lsu_dbar_e(ecl_lsu_dbar_e),       // NEW: connected, always 0
     .ecl_lsu_op_e(ecl_lsu_op_e),
     .ecl_lsu_base_e(ecl_lsu_base_e),
     .ecl_lsu_offset_e(ecl_lsu_offset_e),
@@ -62,6 +70,9 @@ c7blsu uut (
     .lsu_ecl_except_buserr_ls3(lsu_ecl_except_buserr_ls3),
     .lsu_ecl_except_ecc_ls3(lsu_ecl_except_ecc_ls3),
     .lsu_ecl_except_buserr_badv_ls3(lsu_ecl_except_buserr_badv_ls3), //新增
+    
+    .lsu_ecl_ibar_fin(lsu_ecl_ibar_fin),   // NEW: output (unused)
+    .lsu_ecl_dbar_fin(lsu_ecl_dbar_fin),   // NEW: output (unused)
     
     // BIU interface
     .lsu_biu_rd_req_ls2(lsu_biu_rd_req_ls2),
@@ -110,6 +121,8 @@ initial begin
     
     // Initialize all inputs
     ecl_lsu_valid_e = 0;
+    ecl_lsu_ibar_e = 0;          // NEW: set to 0
+    ecl_lsu_dbar_e = 0;          // NEW: set to 0
     ecl_lsu_op_e = 0;
     ecl_lsu_base_e = 0;
     ecl_lsu_offset_e = 0;
