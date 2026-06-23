@@ -9,8 +9,8 @@ reg resetn;
 
 // ECL Interface
 reg ecl_lsu_valid_e;
-reg ecl_lsu_ibar_e;          // NEW: ibar input
-reg ecl_lsu_dbar_e;          // NEW: dbar input
+reg ecl_lsu_ibar_e;          // ibar input
+reg ecl_lsu_dbar_e;          // dbar input
 reg [6:0] ecl_lsu_op_e;
 reg [31:0] ecl_lsu_base_e;
 reg [31:0] ecl_lsu_offset_e;
@@ -26,9 +26,15 @@ wire lsu_ecl_except_buserr_ls3;
 wire lsu_ecl_except_ecc_ls3;
 wire [31:0] lsu_ecl_except_buserr_badv_ls3;
 
-// NEW: ibar/dbar finish outputs (unused in load tests)
+// ibar/dbar finish outputs
 wire lsu_ecl_ibar_fin;
 wire lsu_ecl_dbar_fin;
+
+// New LL/SC ports
+wire lsu_ecl_sc_fin_ls1;        // SC finish at LS1
+wire lsu_csr_llb_set;           // Set LLbit from LSU (for ll.w)
+wire lsu_csr_llb_clr;           // Clear LLbit from LSU (for sc.w success)
+reg  csr_lsu_llb;               // Current LLbit value from CSR (driven by test)
 
 // BIU Interface
 wire lsu_biu_rd_req_ls2;
@@ -64,8 +70,8 @@ c7blsu dut (
     
     // ECL Interface
     .ecl_lsu_valid_e(ecl_lsu_valid_e),
-    .ecl_lsu_ibar_e(ecl_lsu_ibar_e),       // NEW: connected, always 0
-    .ecl_lsu_dbar_e(ecl_lsu_dbar_e),       // NEW: connected, always 0
+    .ecl_lsu_ibar_e(ecl_lsu_ibar_e),
+    .ecl_lsu_dbar_e(ecl_lsu_dbar_e),
     .ecl_lsu_op_e(ecl_lsu_op_e),
     .ecl_lsu_base_e(ecl_lsu_base_e),
     .ecl_lsu_offset_e(ecl_lsu_offset_e),
@@ -80,8 +86,12 @@ c7blsu dut (
     .lsu_ecl_except_ecc_ls3(lsu_ecl_except_ecc_ls3),
     .lsu_ecl_except_buserr_badv_ls3(lsu_ecl_except_buserr_badv_ls3),
     
-    .lsu_ecl_ibar_fin(lsu_ecl_ibar_fin),   // NEW: output (unused)
-    .lsu_ecl_dbar_fin(lsu_ecl_dbar_fin),   // NEW: output (unused)
+    .lsu_ecl_ibar_fin(lsu_ecl_ibar_fin),
+    .lsu_ecl_dbar_fin(lsu_ecl_dbar_fin),
+    .lsu_ecl_sc_fin_ls1(lsu_ecl_sc_fin_ls1),
+    .lsu_csr_llb_set(lsu_csr_llb_set),
+    .lsu_csr_llb_clr(lsu_csr_llb_clr),
+    .csr_lsu_llb(csr_lsu_llb),
     
     // BIU Interface
     .lsu_biu_rd_req_ls2(lsu_biu_rd_req_ls2),
@@ -108,8 +118,8 @@ begin
     clk = 0;
     resetn = 0;
     ecl_lsu_valid_e = 0;
-    ecl_lsu_ibar_e = 0;          // NEW: initialize to 0
-    ecl_lsu_dbar_e = 0;          // NEW: initialize to 0
+    ecl_lsu_ibar_e = 0;
+    ecl_lsu_dbar_e = 0;
     ecl_lsu_op_e = 0;
     ecl_lsu_base_e = 0;
     ecl_lsu_offset_e = 0;
@@ -123,6 +133,7 @@ begin
     biu_lsu_wr_fin_ls3 = 0;
     biu_lsu_wr_fault_ls3 = 0;
     biu_lsu_wr_fault_code_ls3 = 0;
+    csr_lsu_llb = 0;                  // Initialize LL/SC CSR input
     expected_addr = 0;
     expected_data = 0;
     test_num = 0;
@@ -245,7 +256,7 @@ end
 endtask
 
 // ========================
-// Test cases
+// Test cases (unchanged)
 // ========================
 
 // Test 1: LD.W (aligned) - address 0x1000

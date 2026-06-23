@@ -44,6 +44,12 @@ module c7blsu(
 
    output             lsu_ecl_ibar_fin, 
    output             lsu_ecl_dbar_fin, 
+   output             lsu_ecl_sc_fin_ls1,
+
+   output             lsu_csr_llb_set,
+   output             lsu_csr_llb_clr,
+
+   input              csr_lsu_llb,
 
    //--------------------------------------------------
    // STB Interface
@@ -114,6 +120,8 @@ module c7blsu(
 
    wire lsu_dbar_ls1 = ecl_lsu_ibar_e;
    wire lsu_ibar_ls1 = ecl_lsu_dbar_e;
+
+   wire lsu_scw_q; // record whether this is a scw instrution for later use
 
    // decode atomic op
    wire lsu_am_lw   = lsu_op_ls1 == `LLSU_AMSWAP_W    || lsu_op_ls1 == `LLSU_AMADD_W     ||
@@ -188,7 +196,9 @@ module c7blsu(
 
    //wire lsu_wr      = lsu_sw || lsu_sb || lsu_sh || lsu_scw || lsu_scd || lsu_sd;
    wire lsu_load_ls1  = lsu_ld || lsu_lw || lsu_llw || lsu_lld || lsu_lb  || lsu_lbu || lsu_lh || lsu_lhu || lsu_lbu || lsu_lwu;
-   wire lsu_store_ls1 = lsu_sb || lsu_sh || lsu_sd  || lsu_sw  || lsu_scw || lsu_scd;
+   //wire lsu_store_ls1 = lsu_sb || lsu_sh || lsu_sd  || lsu_sw  || lsu_scw || lsu_scd;
+   // If no llb set, sc do not perform store
+   wire lsu_store_ls1 = lsu_sb || lsu_sh || lsu_sd  || lsu_sw  || (lsu_scw && csr_lsu_llb) || (lsu_scd && csr_lsu_llb); 
 
    wire lsu_load_ls2;
    wire lsu_store_ls2;
@@ -356,8 +366,11 @@ module c7blsu(
 	   //({32{!lsu_align_mode_ls3[4] && !lsu_align_mode_ls3[3] && !lsu_align_mode_ls3[2] && !lsu_align_mode_ls3[1]}} & {31'd0,data_scsucceed}) ; // data_scsucceed = 1'b1
 	   ({32{!lsu_align_mode_ls3[4] && !lsu_align_mode_ls3[3] && !lsu_align_mode_ls3[2] && !lsu_align_mode_ls3[1]}} & {31'd0, 1'b1}) ; // data_scsucceed = 1'b1
 
-   assign lsu_ecl_data_ls3 = lsu_align_res_ls3;
-   assign lsu_ecl_data_valid_ls3 = biu_lsu_data_valid_ls3;
+   //assign lsu_ecl_data_ls3 = lsu_align_res_ls3;
+   //assign lsu_ecl_data_valid_ls3 = biu_lsu_data_valid_ls3;
+   // If it is a scw, it also writes rd register
+   assign lsu_ecl_data_ls3 = lsu_scw_q ? 32'b1 : lsu_align_res_ls3;
+   assign lsu_ecl_data_valid_ls3 = lsu_scw_q ? biu_lsu_wr_fin_ls3 : biu_lsu_data_valid_ls3;
 
 
    assign lsu_ecl_wr_fin_ls3 = biu_lsu_wr_fin_ls3;
@@ -367,6 +380,13 @@ module c7blsu(
    assign lsu_base_ls1 = ecl_lsu_base_e;
    assign lsu_offset_ls1 = ecl_lsu_offset_e;
    assign lsu_wdata_raw_ls1 = ecl_lsu_wdata_e;
+
+
+   // ll.w sc.w
+   assign lsu_csr_llb_set = lsu_llw & lsu_valid_ls1;
+   assign lsu_csr_llb_clr = lsu_scw & lsu_valid_ls1 & csr_lsu_llb;
+   assign lsu_ecl_sc_fin_ls1 = lsu_scw & lsu_valid_ls1 & ~csr_lsu_llb;
+
 
    //
    // registers
@@ -540,6 +560,13 @@ module c7blsu(
    // one request processing through the pipeline at a time. These registers
    // therefore simply duplicate the value in _ls1. They are kept in the
    // design for clarity and to maintain flexibility for future modifications.
+
+   dffrle_ns #(1) lsu_scw_reg (
+      .din (lsu_scw & csr_lsu_llb), // it is a scw that will store and write rd register with 32'b1
+      .clk (clk),
+      .rst_l (resetn),
+      .en (lsu_valid_ls1),
+      .q   (lsu_scw_q));
 
 
    assign lsu_ecl_except_buserr_ls3 = biu_lsu_fault_ls3 | biu_lsu_wr_fault_ls3;

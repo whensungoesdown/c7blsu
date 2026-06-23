@@ -8,8 +8,8 @@ reg resetn;
 
 // ECL interface signals
 reg ecl_lsu_valid_e;
-reg ecl_lsu_ibar_e;          // NEW: ibar input
-reg ecl_lsu_dbar_e;          // NEW: dbar input
+reg ecl_lsu_ibar_e;          // ibar input
+reg ecl_lsu_dbar_e;          // dbar input
 reg [6:0] ecl_lsu_op_e;
 reg [31:0] ecl_lsu_base_e;
 reg [31:0] ecl_lsu_offset_e;
@@ -23,11 +23,14 @@ wire lsu_ecl_except_ale_ls1;
 wire [31:0] lsu_ecl_except_badv_ls1;
 wire lsu_ecl_except_buserr_ls3;
 wire lsu_ecl_except_ecc_ls3;
-wire [31:0] lsu_ecl_except_buserr_badv_ls3;  //新增
+wire [31:0] lsu_ecl_except_buserr_badv_ls3;
 
-// New output signals for ibar/dbar
-wire lsu_ecl_ibar_fin;        // NEW: ibar finish
-wire lsu_ecl_dbar_fin;        // NEW: dbar finish
+// New output signals for ibar/dbar/sc and LL/SC
+wire lsu_ecl_ibar_fin;
+wire lsu_ecl_dbar_fin;
+wire lsu_ecl_sc_fin_ls1;        // SC finish at LS1
+wire lsu_csr_llb_set;           // Set LLbit from LSU (for ll.w)
+wire lsu_csr_llb_clr;           // Clear LLbit from LSU (for sc.w success)
 
 // BIU interface
 wire lsu_biu_rd_req_ls2;
@@ -35,8 +38,8 @@ wire [31:0] lsu_biu_rd_addr_ls2;
 reg biu_lsu_rd_ack_ls2;
 reg biu_lsu_data_valid_ls3;
 reg [63:0] biu_lsu_data_ls3;
-reg biu_lsu_fault_ls3;           //新增
-reg [1:0] biu_lsu_fault_code_ls3; //新增
+reg biu_lsu_fault_ls3;
+reg [1:0] biu_lsu_fault_code_ls3;
 
 wire lsu_biu_wr_req_ls2;
 wire [31:0] lsu_biu_wr_addr_ls2;
@@ -45,8 +48,11 @@ wire [7:0] lsu_biu_wr_strb_ls2;
 
 reg biu_lsu_wr_ack_ls2;
 reg biu_lsu_wr_fin_ls3;
-reg biu_lsu_wr_fault_ls3;        //新增
-reg [1:0] biu_lsu_wr_fault_code_ls3; //新增
+reg biu_lsu_wr_fault_ls3;
+reg [1:0] biu_lsu_wr_fault_code_ls3;
+
+// Input from CSR (driven by test)
+reg csr_lsu_llb;               // Current LLbit value from CSR
 
 // DUT instantiation
 c7blsu uut (
@@ -55,8 +61,8 @@ c7blsu uut (
     
     // ECL interface
     .ecl_lsu_valid_e(ecl_lsu_valid_e),
-    .ecl_lsu_ibar_e(ecl_lsu_ibar_e),       // NEW: connected, always 0
-    .ecl_lsu_dbar_e(ecl_lsu_dbar_e),       // NEW: connected, always 0
+    .ecl_lsu_ibar_e(ecl_lsu_ibar_e),
+    .ecl_lsu_dbar_e(ecl_lsu_dbar_e),
     .ecl_lsu_op_e(ecl_lsu_op_e),
     .ecl_lsu_base_e(ecl_lsu_base_e),
     .ecl_lsu_offset_e(ecl_lsu_offset_e),
@@ -69,10 +75,14 @@ c7blsu uut (
     .lsu_ecl_except_ale_badv_ls1(lsu_ecl_except_badv_ls1),
     .lsu_ecl_except_buserr_ls3(lsu_ecl_except_buserr_ls3),
     .lsu_ecl_except_ecc_ls3(lsu_ecl_except_ecc_ls3),
-    .lsu_ecl_except_buserr_badv_ls3(lsu_ecl_except_buserr_badv_ls3), //新增
+    .lsu_ecl_except_buserr_badv_ls3(lsu_ecl_except_buserr_badv_ls3),
     
-    .lsu_ecl_ibar_fin(lsu_ecl_ibar_fin),   // NEW: output (unused)
-    .lsu_ecl_dbar_fin(lsu_ecl_dbar_fin),   // NEW: output (unused)
+    .lsu_ecl_ibar_fin(lsu_ecl_ibar_fin),
+    .lsu_ecl_dbar_fin(lsu_ecl_dbar_fin),
+    .lsu_ecl_sc_fin_ls1(lsu_ecl_sc_fin_ls1),
+    .lsu_csr_llb_set(lsu_csr_llb_set),
+    .lsu_csr_llb_clr(lsu_csr_llb_clr),
+    .csr_lsu_llb(csr_lsu_llb),
     
     // BIU interface
     .lsu_biu_rd_req_ls2(lsu_biu_rd_req_ls2),
@@ -80,8 +90,8 @@ c7blsu uut (
     .biu_lsu_rd_ack_ls2(biu_lsu_rd_ack_ls2),
     .biu_lsu_data_valid_ls3(biu_lsu_data_valid_ls3),
     .biu_lsu_data_ls3(biu_lsu_data_ls3),
-    .biu_lsu_fault_ls3(biu_lsu_fault_ls3),                 //新增
-    .biu_lsu_fault_code_ls3(biu_lsu_fault_code_ls3),       //新增
+    .biu_lsu_fault_ls3(biu_lsu_fault_ls3),
+    .biu_lsu_fault_code_ls3(biu_lsu_fault_code_ls3),
     
     .lsu_biu_wr_req_ls2(lsu_biu_wr_req_ls2),
     .lsu_biu_wr_addr_ls2(lsu_biu_wr_addr_ls2),
@@ -90,8 +100,8 @@ c7blsu uut (
     
     .biu_lsu_wr_ack_ls2(biu_lsu_wr_ack_ls2),
     .biu_lsu_wr_fin_ls3(biu_lsu_wr_fin_ls3),
-    .biu_lsu_wr_fault_ls3(biu_lsu_wr_fault_ls3),           //新增
-    .biu_lsu_wr_fault_code_ls3(biu_lsu_wr_fault_code_ls3)  //新增
+    .biu_lsu_wr_fault_ls3(biu_lsu_wr_fault_ls3),
+    .biu_lsu_wr_fault_code_ls3(biu_lsu_wr_fault_code_ls3)
 );
 
 // Clock generation
@@ -121,8 +131,8 @@ initial begin
     
     // Initialize all inputs
     ecl_lsu_valid_e = 0;
-    ecl_lsu_ibar_e = 0;          // NEW: set to 0
-    ecl_lsu_dbar_e = 0;          // NEW: set to 0
+    ecl_lsu_ibar_e = 0;
+    ecl_lsu_dbar_e = 0;
     ecl_lsu_op_e = 0;
     ecl_lsu_base_e = 0;
     ecl_lsu_offset_e = 0;
@@ -131,13 +141,16 @@ initial begin
     biu_lsu_rd_ack_ls2 = 0;
     biu_lsu_data_valid_ls3 = 0;
     biu_lsu_data_ls3 = 0;
-    biu_lsu_fault_ls3 = 0;           //新增
-    biu_lsu_fault_code_ls3 = 0;       //新增
+    biu_lsu_fault_ls3 = 0;
+    biu_lsu_fault_code_ls3 = 0;
     
     biu_lsu_wr_ack_ls2 = 0;
     biu_lsu_wr_fin_ls3 = 0;
-    biu_lsu_wr_fault_ls3 = 0;         //新增
-    biu_lsu_wr_fault_code_ls3 = 0;     //新增
+    biu_lsu_wr_fault_ls3 = 0;
+    biu_lsu_wr_fault_code_ls3 = 0;
+    
+    // Initialize LL/SC CSR input
+    csr_lsu_llb = 0;
     
     test_count = 0;
     error_count = 0;
@@ -158,12 +171,13 @@ initial begin
     $display("Testing with updated c7blsu.v interface");
     $display("biu_lsu_wr_fin_ls3 (WR_FIN) signal test included");
     $display("lsu_ecl_wr_fin_ls3 ERROR will cause test fail");
+    $display("LL/SC ports added: lsu_ecl_sc_fin_ls1, lsu_csr_llb_set, lsu_csr_llb_clr, csr_lsu_llb");
     $display("========================================\n");
     
     // Test Group 1: WSTRB for All Byte Positions
     test_all_byte_positions();
     
-    // Test Group 2: Data Replication Patterns
+    // Test Group 2: Data Replication Patterns (commented out in original)
     //test_data_replication_patterns();
     
     // Test Group 3: WSTRB and Data Relationship
@@ -1673,6 +1687,17 @@ always @(posedge clk) begin
     if (biu_lsu_wr_fin_ls3 && !lsu_ecl_wr_fin_ls3) begin
         $display("[%0t] WR_FIN ERROR: biu_lsu_wr_fin_ls3=1 but lsu_ecl_wr_fin_ls3=0", $time);
         wr_fin_check_error = wr_fin_check_error + 1;
+    end
+    
+    // Optional monitor for LL/SC signals
+    if (lsu_ecl_sc_fin_ls1) begin
+        $display("[%0t] SC instruction finished at LS1", $time);
+    end
+    if (lsu_csr_llb_set) begin
+        $display("[%0t] LLbit set by ll.w", $time);
+    end
+    if (lsu_csr_llb_clr) begin
+        $display("[%0t] LLbit cleared by sc.w success", $time);
     end
 end
 
