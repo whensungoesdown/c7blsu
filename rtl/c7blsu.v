@@ -46,6 +46,7 @@ module c7blsu(
    output             lsu_ecl_dbar_fin, 
    output             lsu_ecl_sc_fin_ls1,
 
+   output             lsu_sc,
    output             lsu_csr_llb_set,
    output             lsu_csr_llb_clr,
 
@@ -366,11 +367,11 @@ module c7blsu(
 	   //({32{!lsu_align_mode_ls3[4] && !lsu_align_mode_ls3[3] && !lsu_align_mode_ls3[2] && !lsu_align_mode_ls3[1]}} & {31'd0,data_scsucceed}) ; // data_scsucceed = 1'b1
 	   ({32{!lsu_align_mode_ls3[4] && !lsu_align_mode_ls3[3] && !lsu_align_mode_ls3[2] && !lsu_align_mode_ls3[1]}} & {31'd0, 1'b1}) ; // data_scsucceed = 1'b1
 
-   //assign lsu_ecl_data_ls3 = lsu_align_res_ls3;
-   //assign lsu_ecl_data_valid_ls3 = biu_lsu_data_valid_ls3;
+   assign lsu_ecl_data_ls3 = lsu_align_res_ls3;
+   assign lsu_ecl_data_valid_ls3 = biu_lsu_data_valid_ls3;
    // If it is a scw, it also writes rd register
-   assign lsu_ecl_data_ls3 = lsu_scw_q ? 32'b1 : lsu_align_res_ls3;
-   assign lsu_ecl_data_valid_ls3 = lsu_scw_q ? biu_lsu_wr_fin_ls3 : biu_lsu_data_valid_ls3;
+   //assign lsu_ecl_data_ls3 = lsu_scw_q ? 32'b1 : lsu_align_res_ls3;
+   //assign lsu_ecl_data_valid_ls3 = lsu_scw_q ? biu_lsu_wr_fin_ls3 : biu_lsu_data_valid_ls3;
 
 
    assign lsu_ecl_wr_fin_ls3 = biu_lsu_wr_fin_ls3;
@@ -568,6 +569,7 @@ module c7blsu(
       .en (lsu_valid_ls1),
       .q   (lsu_scw_q));
 
+   assign lsu_sc = lsu_scw_q;
 
    assign lsu_ecl_except_buserr_ls3 = biu_lsu_fault_ls3 | biu_lsu_wr_fault_ls3;
    assign lsu_ecl_except_buserr_badv_ls3 = biu_lsu_fault_ls3 ? lsu_addr_ls3 : lsu_addr_ls2;
