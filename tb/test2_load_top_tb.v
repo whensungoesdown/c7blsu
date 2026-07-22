@@ -36,6 +36,15 @@ wire lsu_csr_llb_set;           // Set LLbit from LSU (for ll.w)
 wire lsu_csr_llb_clr;           // Clear LLbit from LSU (for sc.w success)
 reg  csr_lsu_llb;               // Current LLbit value from CSR (driven by test)
 
+// *** NEW: Missing CSR/DMW inputs ***
+wire lsu_sc = 1'b0;                    // SC indicator (fixed to 0 for load tests)
+wire csr_lsu_crmd_da = 1'b1;           // Direct address mode enabled (DA=1)
+wire csr_lsu_crmd_pg = 1'b0;           // Paging disabled (PG=0)
+wire [2:0] csr_lsu_dmw0_pseg = 3'b0;
+wire [2:0] csr_lsu_dmw0_vseg = 3'b0;
+wire [2:0] csr_lsu_dmw1_pseg = 3'b0;
+wire [2:0] csr_lsu_dmw1_vseg = 3'b0;
+
 // BIU Interface
 wire lsu_biu_rd_req_ls2;
 wire [31:0] lsu_biu_rd_addr_ls2;
@@ -92,6 +101,15 @@ c7blsu dut (
     .lsu_csr_llb_set(lsu_csr_llb_set),
     .lsu_csr_llb_clr(lsu_csr_llb_clr),
     .csr_lsu_llb(csr_lsu_llb),
+    
+    // *** NEW: Connect missing ports ***
+    .lsu_sc(lsu_sc),
+    .csr_lsu_crmd_da(csr_lsu_crmd_da),
+    .csr_lsu_crmd_pg(csr_lsu_crmd_pg),
+    .csr_lsu_dmw0_pseg(csr_lsu_dmw0_pseg),
+    .csr_lsu_dmw0_vseg(csr_lsu_dmw0_vseg),
+    .csr_lsu_dmw1_pseg(csr_lsu_dmw1_pseg),
+    .csr_lsu_dmw1_vseg(csr_lsu_dmw1_vseg),
     
     // BIU Interface
     .lsu_biu_rd_req_ls2(lsu_biu_rd_req_ls2),

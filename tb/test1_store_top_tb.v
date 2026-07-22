@@ -54,6 +54,15 @@ reg [1:0] biu_lsu_wr_fault_code_ls3;
 // Input from CSR (driven by test)
 reg csr_lsu_llb;               // Current LLbit value from CSR
 
+// *** NEW: Missing CSR/DMW inputs ***
+wire lsu_sc = 1'b0;                    // SC indicator (fixed to 0 for store tests)
+wire csr_lsu_crmd_da = 1'b1;           // Direct address mode enabled (DA=1)
+wire csr_lsu_crmd_pg = 1'b0;           // Paging disabled (PG=0)
+wire [2:0] csr_lsu_dmw0_pseg = 3'b0;
+wire [2:0] csr_lsu_dmw0_vseg = 3'b0;
+wire [2:0] csr_lsu_dmw1_pseg = 3'b0;
+wire [2:0] csr_lsu_dmw1_vseg = 3'b0;
+
 // DUT instantiation
 c7blsu uut (
     .clk(clk),
@@ -83,6 +92,15 @@ c7blsu uut (
     .lsu_csr_llb_set(lsu_csr_llb_set),
     .lsu_csr_llb_clr(lsu_csr_llb_clr),
     .csr_lsu_llb(csr_lsu_llb),
+    
+    // *** NEW: Connect missing ports ***
+    .lsu_sc(lsu_sc),
+    .csr_lsu_crmd_da(csr_lsu_crmd_da),
+    .csr_lsu_crmd_pg(csr_lsu_crmd_pg),
+    .csr_lsu_dmw0_pseg(csr_lsu_dmw0_pseg),
+    .csr_lsu_dmw0_vseg(csr_lsu_dmw0_vseg),
+    .csr_lsu_dmw1_pseg(csr_lsu_dmw1_pseg),
+    .csr_lsu_dmw1_vseg(csr_lsu_dmw1_vseg),
     
     // BIU interface
     .lsu_biu_rd_req_ls2(lsu_biu_rd_req_ls2),
@@ -172,6 +190,7 @@ initial begin
     $display("biu_lsu_wr_fin_ls3 (WR_FIN) signal test included");
     $display("lsu_ecl_wr_fin_ls3 ERROR will cause test fail");
     $display("LL/SC ports added: lsu_ecl_sc_fin_ls1, lsu_csr_llb_set, lsu_csr_llb_clr, csr_lsu_llb");
+    $display("Missing ports connected: lsu_sc=0, csr_lsu_crmd_da=1, pg=0, dmw=0");
     $display("========================================\n");
     
     // Test Group 1: WSTRB for All Byte Positions

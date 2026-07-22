@@ -4,8 +4,10 @@
 #+incdir+../../rtl/c7bicu
 #+incdir+../../rtl/c7bbiu
 
-../altera_mf.v
+${PROJECT_ROOT}/simulation/altera_mf.v
 
-../../rtl/lib/swrvr_clib.v \
-../../rtl/lib/swrvr_dlib.v \
-../../rtl/c7blsu.v 
+${PROJECT_ROOT}/rtl/lib/swrvr_clib.v 
+${PROJECT_ROOT}/rtl/lib/swrvr_dlib.v 
+${PROJECT_ROOT}/rtl/c7blsu.v 
+
+-f ${PROJECT_ROOT}/../c7btlb/flist/c7btlb.flist

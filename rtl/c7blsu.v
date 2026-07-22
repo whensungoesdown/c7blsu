@@ -94,8 +94,23 @@ module c7blsu(
    input              biu_lsu_wr_ack_ls2,
    input              biu_lsu_wr_fin_ls3,
    input              biu_lsu_wr_fault_ls3,
-   input  [1:0]       biu_lsu_wr_fault_code_ls3
+   input  [1:0]       biu_lsu_wr_fault_code_ls3,
+
+   input              csr_lsu_crmd_da, 
+   input              csr_lsu_crmd_pg,
+
+   input  [2:0]       csr_lsu_dmw0_pseg,
+   input  [2:0]       csr_lsu_dmw0_vseg,
+
+   input  [2:0]       csr_lsu_dmw1_pseg,
+   input  [2:0]       csr_lsu_dmw1_vseg
 );
+
+   wire da_mode = csr_lsu_crmd_da;
+   wire pg_mode = ~csr_lsu_crmd_da & csr_lsu_crmd_pg;
+
+   wire match_dmw0; 
+   wire match_dmw1; 
 
    wire               lsu_valid_ls1;
    wire               lsu_valid_ls2;
@@ -117,6 +132,8 @@ module c7blsu(
 
    wire [31:0]        lsu_addr_ls2;
    wire [31:0]        lsu_addr_ls3;
+
+   wire [31:0]        lsu_paddr_ls2;
 
 
    wire lsu_dbar_ls1 = ecl_lsu_ibar_e;
@@ -234,6 +251,105 @@ module c7blsu(
    assign lsu_ecl_dbar_fin = lsu_dbar_ls1 & lsu_valid_ls1;
 
 
+
+   //
+   // dtlb
+   //
+
+   // ---------- TLB search port signals ----------
+   wire        tlb_s_vld;
+   wire [18:0] tlb_s_vppn;     // VPN2 (19 bits)
+   wire        tlb_s_odd_page;
+   wire [ 9:0] tlb_s_asid;
+   wire        tlb_s_found;
+   wire [ 4:0] tlb_s_index;
+   wire [19:0] tlb_s_pfn;      // Physical page number
+   wire        tlb_s_d;
+   wire        tlb_s_v;
+   wire [ 1:0] tlb_s_mat;
+   wire [ 1:0] tlb_s_plv;
+
+   wire tlb_res_vld;
+
+   assign tlb_s_vld = lsu_valid_ls1 & pg_mode & ~(match_dmw0 | match_dmw1);
+   assign tlb_s_vppn = lsu_addr_ls1[31:13];
+   assign tlb_s_odd_page = lsu_addr_ls1[12];
+   assign tlb_s_asid = 10'b0;
+
+   // Physical address generation
+   // - Direct address mode (DA=1, PG=0): clear high 3 bits
+   // - Mapped address mode (DA=0, PG=1):
+   //   - If DMW0 hit, use DMW0 direct mapping
+   //   - Otherwise use TLB translation result
+   assign match_dmw0 = (lsu_addr_ls2[31:29] == csr_lsu_dmw0_vseg);
+   assign match_dmw1 = (lsu_addr_ls2[31:29] == csr_lsu_dmw1_vseg);
+
+   // ---------- Generate physical address ----------
+   // Physical address = PFN (20 bits) concatenated with page offset (12 bits)
+   // This is valid only when tlb_s_found is 1; otherwise the value is meaningless.
+   // Physical address with DMW0 priority over DMW1
+   assign lsu_paddr_ls2 = da_mode ? (lsu_addr_ls2 & 32'h1FFFFFFF)  // not affect 0x1c000000
+                                  : (match_dmw0 ? {csr_lsu_dmw0_pseg, lsu_addr_ls2[28:0]}
+                                  : (match_dmw1 ? {csr_lsu_dmw1_pseg, lsu_addr_ls2[28:0]}
+                                                : {tlb_s_pfn, lsu_addr_ls2[11:0]}));
+
+   c7btlb u_dtlb(
+      .clk                             (clk),
+      .resetn                          (resetn),
+
+      // search port
+      .s_vld                           (tlb_s_vld),
+      .s_vppn                          (tlb_s_vppn),
+      .s_odd_page                      (tlb_s_odd_page),
+      .s_asid                          (tlb_s_asid),
+      .s_found                         (tlb_s_found),
+      .s_index                         (tlb_s_index),
+      .s_pfn                           (tlb_s_pfn),
+      .s_d                             (tlb_s_d),
+      .s_v                             (tlb_s_v),
+      .s_mat                           (tlb_s_mat),
+      .s_plv                           (tlb_s_plv),
+
+      // write port
+      .we                              (1'b0),
+      .w_index                         (),
+      .w_vppn                          (),
+      .w_asid                          (),
+      .w_g                             (),
+      .w_v0                            (), 
+      .w_d0                            (),
+      .w_mat0                          (),
+      .w_plv0                          (),
+      .w_ppn0                          (),
+      .w_v1                            (),
+      .w_d1                            (),
+      .w_mat1                          (),
+      .w_plv1                          (),
+      .w_ppn1                          (),
+
+      // read port
+      .r_index                         (),
+      .r_vppn                          (),
+      .r_asid                          (),
+      .r_v0                            (),
+      .r_d0                            (),
+      .r_mat0                          (),
+      .r_plv0                          (),
+      .r_ppn0                          (),
+      .r_v1                            (),
+      .r_d1                            (),
+      .r_mat1                          (),
+      .r_plv1                          (),
+      .r_ppn1                          (),
+
+      // invalid port
+      .inv_en                          (),
+      .inv_op                          (),
+      .inv_asid                        (),
+      .inv_vppn                        ()
+   );
+
+
    //
    // BIU read request
    //
@@ -293,7 +409,8 @@ module c7blsu(
    assign lsu_biu_rd_req_ls2 = biu_rd_req_q;
 
    //assign lsu_biu_rd_addr_ls2 = {lsu_addr_ls2[31:3], 3'b000}; // 64-bit align
-   assign lsu_biu_rd_addr_ls2 = lsu_addr_ls2;
+   //assign lsu_biu_rd_addr_ls2 = lsu_addr_ls2;
+   assign lsu_biu_rd_addr_ls2 = lsu_paddr_ls2;
 
    //
    // BIU write request 
@@ -320,11 +437,13 @@ module c7blsu(
    assign lsu_biu_wr_req_ls2 = biu_wr_req_q;
 
    //assign lsu_biu_wr_addr_ls2 = {lsu_addr_ls2[31:3], 3'b000}; // 64-bit align
-   assign lsu_biu_wr_addr_ls2 = lsu_addr_ls2;
+   //assign lsu_biu_wr_addr_ls2 = lsu_addr_ls2;
+   assign lsu_biu_wr_addr_ls2 = lsu_paddr_ls2;
 
 
 
-   wire lsu_wr_high32_ls2 = lsu_addr_ls2[2];
+   //wire lsu_wr_high32_ls2 = lsu_addr_ls2[2];
+   wire lsu_wr_high32_ls2 = lsu_paddr_ls2[2];
    assign lsu_biu_wr_data_ls2 = lsu_wr_high32_ls2 ? {lsu_wdata_ls2, 32'b0} : {32'b0, lsu_wdata_ls2};
    assign lsu_biu_wr_strb_ls2 = lsu_wr_high32_ls2 ? {lsu_wstrb_ls2, 4'b0} : {4'b0, lsu_wstrb_ls2};
 
@@ -333,7 +452,7 @@ module c7blsu(
    // Process data received from BIU 
    //
 
-   wire data_high32_ls3 = lsu_addr_ls3[2];
+   wire data_high32_ls3 = lsu_addr_ls3[2]; // should be lsu_paddr_ls3, but it is the same
 
    wire [31:0] data_rdata_input_ls3 = data_high32_ls3 ? biu_lsu_data_ls3[63:32] : biu_lsu_data_ls3[31:0];
 
