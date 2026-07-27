@@ -103,7 +103,33 @@ module c7blsu(
    input  [2:0]       csr_lsu_dmw0_vseg,
 
    input  [2:0]       csr_lsu_dmw1_pseg,
-   input  [2:0]       csr_lsu_dmw1_vseg
+   input  [2:0]       csr_lsu_dmw1_vseg,
+
+   input  [18:0]      csr_dtlb_tlbehi_vppn,
+
+   input              csr_dtlb_tlbidx_ne,
+   input  [5:0]       csr_dtlb_tlbidx_ps,
+   input  [4:0]       csr_dtlb_tlbidx_index,
+
+   input  [19:0]      csr_dtlb_tlbelo0_ppn,
+   input              csr_dtlb_tlbelo0_g,
+   input  [1:0]       csr_dtlb_tlbelo0_mat,
+   input  [1:0]       csr_dtlb_tlbelo0_plv,
+   input              csr_dtlb_tlbelo0_d,
+   input              csr_dtlb_tlbelo0_v,
+
+   input  [19:0]      csr_dtlb_tlbelo1_ppn,
+   input              csr_dtlb_tlbelo1_g,
+   input  [1:0]       csr_dtlb_tlbelo1_mat,
+   input  [1:0]       csr_dtlb_tlbelo1_plv,
+   input              csr_dtlb_tlbelo1_d,
+   input              csr_dtlb_tlbelo1_v,
+
+   input              csr_dtlb_tlbrefill_ctx, 
+
+   input  [4:0]       exu_dtlb_random_index, 
+
+   input              csr_dtlb_tlbfill_vld_e 
 );
 
    wire da_mode = csr_lsu_crmd_da;
@@ -311,26 +337,31 @@ module c7blsu(
       .s_plv                           (tlb_s_plv),
 
       // write port
-      .we                              (1'b0),
-      .w_index                         (),
-      .w_vppn                          (),
-      .w_asid                          (),
-      .w_g                             (),
-      .w_v0                            (), 
-      .w_d0                            (),
-      .w_mat0                          (),
-      .w_plv0                          (),
-      .w_ppn0                          (),
-      .w_v1                            (),
-      .w_d1                            (),
-      .w_mat1                          (),
-      .w_plv1                          (),
-      .w_ppn1                          (),
+      .we                              (csr_dtlb_tlbfill_vld_e),
+      .w_index                         (csr_dtlb_tlbfill_vld_e ? exu_dtlb_random_index : csr_dtlb_tlbidx_index),
+      .w_vppn                          (csr_dtlb_tlbehi_vppn),
+      .w_asid                          (10'b0),
+      .w_g                             (csr_dtlb_tlbelo0_g & csr_dtlb_tlbelo1_g),
+      .w_ps                            (csr_dtlb_tlbidx_ps),
+      .w_e                             (csr_dtlb_tlbrefill_ctx ? 1'b1 : ~csr_dtlb_tlbidx_ne),
+      .w_v0                            (csr_dtlb_tlbelo0_v), 
+      .w_d0                            (csr_dtlb_tlbelo0_d),
+      .w_mat0                          (csr_dtlb_tlbelo0_mat),
+      .w_plv0                          (csr_dtlb_tlbelo0_plv),
+      .w_ppn0                          (csr_dtlb_tlbelo0_ppn),
+      .w_v1                            (csr_dtlb_tlbelo1_v),
+      .w_d1                            (csr_dtlb_tlbelo1_d),
+      .w_mat1                          (csr_dtlb_tlbelo1_mat),
+      .w_plv1                          (csr_dtlb_tlbelo1_plv),
+      .w_ppn1                          (csr_dtlb_tlbelo1_ppn),
 
       // read port
       .r_index                         (),
       .r_vppn                          (),
       .r_asid                          (),
+      .r_g                             (),
+      .r_ps                            (),
+      .r_e                             (),
       .r_v0                            (),
       .r_d0                            (),
       .r_mat0                          (),

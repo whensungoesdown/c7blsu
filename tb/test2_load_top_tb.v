@@ -36,7 +36,7 @@ wire lsu_csr_llb_set;           // Set LLbit from LSU (for ll.w)
 wire lsu_csr_llb_clr;           // Clear LLbit from LSU (for sc.w success)
 reg  csr_lsu_llb;               // Current LLbit value from CSR (driven by test)
 
-// *** NEW: Missing CSR/DMW inputs ***
+// CSR/DMW inputs (fixed for test)
 wire lsu_sc = 1'b0;                    // SC indicator (fixed to 0 for load tests)
 wire csr_lsu_crmd_da = 1'b1;           // Direct address mode enabled (DA=1)
 wire csr_lsu_crmd_pg = 1'b0;           // Paging disabled (PG=0)
@@ -44,6 +44,27 @@ wire [2:0] csr_lsu_dmw0_pseg = 3'b0;
 wire [2:0] csr_lsu_dmw0_vseg = 3'b0;
 wire [2:0] csr_lsu_dmw1_pseg = 3'b0;
 wire [2:0] csr_lsu_dmw1_vseg = 3'b0;
+
+// *** NEW: TLB output ports from DUT ***
+wire [18:0] csr_dtlb_tlbehi_vppn;
+wire        csr_dtlb_tlbidx_ne;
+wire [5:0]  csr_dtlb_tlbidx_ps;
+wire [4:0]  csr_dtlb_tlbidx_index;
+wire [19:0] csr_dtlb_tlbelo0_ppn;
+wire        csr_dtlb_tlbelo0_g;
+wire [1:0]  csr_dtlb_tlbelo0_mat;
+wire [1:0]  csr_dtlb_tlbelo0_plv;
+wire        csr_dtlb_tlbelo0_d;
+wire        csr_dtlb_tlbelo0_v;
+wire [19:0] csr_dtlb_tlbelo1_ppn;
+wire        csr_dtlb_tlbelo1_g;
+wire [1:0]  csr_dtlb_tlbelo1_mat;
+wire [1:0]  csr_dtlb_tlbelo1_plv;
+wire        csr_dtlb_tlbelo1_d;
+wire        csr_dtlb_tlbelo1_v;
+wire        csr_dtlb_tlbrefill_ctx;
+wire [4:0]  exu_dtlb_random_index;
+wire        csr_dtlb_tlbfill_vld_e;
 
 // BIU Interface
 wire lsu_biu_rd_req_ls2;
@@ -102,7 +123,7 @@ c7blsu dut (
     .lsu_csr_llb_clr(lsu_csr_llb_clr),
     .csr_lsu_llb(csr_lsu_llb),
     
-    // *** NEW: Connect missing ports ***
+    // CSR/DMW inputs (fixed)
     .lsu_sc(lsu_sc),
     .csr_lsu_crmd_da(csr_lsu_crmd_da),
     .csr_lsu_crmd_pg(csr_lsu_crmd_pg),
@@ -110,6 +131,27 @@ c7blsu dut (
     .csr_lsu_dmw0_vseg(csr_lsu_dmw0_vseg),
     .csr_lsu_dmw1_pseg(csr_lsu_dmw1_pseg),
     .csr_lsu_dmw1_vseg(csr_lsu_dmw1_vseg),
+    
+    // *** NEW: TLB output ports ***
+    .csr_dtlb_tlbehi_vppn(csr_dtlb_tlbehi_vppn),
+    .csr_dtlb_tlbidx_ne(csr_dtlb_tlbidx_ne),
+    .csr_dtlb_tlbidx_ps(csr_dtlb_tlbidx_ps),
+    .csr_dtlb_tlbidx_index(csr_dtlb_tlbidx_index),
+    .csr_dtlb_tlbelo0_ppn(csr_dtlb_tlbelo0_ppn),
+    .csr_dtlb_tlbelo0_g(csr_dtlb_tlbelo0_g),
+    .csr_dtlb_tlbelo0_mat(csr_dtlb_tlbelo0_mat),
+    .csr_dtlb_tlbelo0_plv(csr_dtlb_tlbelo0_plv),
+    .csr_dtlb_tlbelo0_d(csr_dtlb_tlbelo0_d),
+    .csr_dtlb_tlbelo0_v(csr_dtlb_tlbelo0_v),
+    .csr_dtlb_tlbelo1_ppn(csr_dtlb_tlbelo1_ppn),
+    .csr_dtlb_tlbelo1_g(csr_dtlb_tlbelo1_g),
+    .csr_dtlb_tlbelo1_mat(csr_dtlb_tlbelo1_mat),
+    .csr_dtlb_tlbelo1_plv(csr_dtlb_tlbelo1_plv),
+    .csr_dtlb_tlbelo1_d(csr_dtlb_tlbelo1_d),
+    .csr_dtlb_tlbelo1_v(csr_dtlb_tlbelo1_v),
+    .csr_dtlb_tlbrefill_ctx(csr_dtlb_tlbrefill_ctx),
+    .exu_dtlb_random_index(exu_dtlb_random_index),
+    .csr_dtlb_tlbfill_vld_e(csr_dtlb_tlbfill_vld_e),
     
     // BIU Interface
     .lsu_biu_rd_req_ls2(lsu_biu_rd_req_ls2),
