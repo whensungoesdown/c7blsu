@@ -35,12 +35,14 @@ module c7blsu(
    output [31:0]      lsu_ecl_data_ls3,
 
    output             lsu_ecl_wr_fin_ls3,
-   // Exceptions: ale, bus error, ECC
+   // Exceptions: ale, bus error, ECC, tlb refill
    output             lsu_ecl_except_ale_ls1,
    output [31:0]      lsu_ecl_except_ale_badv_ls1,
    output             lsu_ecl_except_buserr_ls3,
    output             lsu_ecl_except_ecc_ls3,
    output [31:0]      lsu_ecl_except_buserr_badv_ls3,
+   output             lsu_ecl_except_tlbr_ls2,
+   output [31:0]      lsu_ecl_except_tlbr_badv_ls2,
 
    output             lsu_ecl_ibar_fin, 
    output             lsu_ecl_dbar_fin, 
@@ -109,6 +111,7 @@ module c7blsu(
 
    input              csr_dtlb_tlbidx_ne,
    input  [5:0]       csr_dtlb_tlbidx_ps,
+   input              csr_dtlb_tlbidx_i_d,
    input  [4:0]       csr_dtlb_tlbidx_index,
 
    input  [19:0]      csr_dtlb_tlbelo0_ppn,
@@ -124,12 +127,39 @@ module c7blsu(
    input  [1:0]       csr_dtlb_tlbelo1_plv,
    input              csr_dtlb_tlbelo1_d,
    input              csr_dtlb_tlbelo1_v,
+   input  [9:0]       csr_dtlb_asid_asid, 
 
    input              csr_dtlb_tlbrefill_ctx, 
 
    input  [4:0]       exu_dtlb_random_index, 
 
-   input              csr_dtlb_tlbfill_vld_e 
+   input              csr_dtlb_tlbfill_vld_e, 
+   input              csr_dtlb_tlbwr_vld_e,
+   input              exu_dtlb_tlbsrch_vld_e, 
+   input              exu_dtlb_tlbsrch_vld_m, 
+   input              exu_dtlb_invtlb_vld_e,
+
+   input  [4:0]       exu_dtlb_invtlb_op_e,
+   input  [9:0]       exu_dtlb_invtlb_asid_e,
+   input  [18:0]      exu_dtlb_invtlb_vppn_e,
+
+   // dtlb to csr
+   output [4:0]       dtlb_csr_tlbidx_index,
+   output [18:0]      dtlb_csr_tlbehi_vppn,
+   output             dtlb_csr_tlbelo_g,
+   output [5:0]       dtlb_csr_tlbidx_ps,
+   output             dtlb_csr_tlbidx_e,
+   output             dtlb_csr_tlbelo0_v,
+   output             dtlb_csr_tlbelo0_d,
+   output [1:0]       dtlb_csr_tlbelo0_mat,
+   output [1:0]       dtlb_csr_tlbelo0_plv,
+   output [19:0]      dtlb_csr_tlbelo0_ppn,
+   output             dtlb_csr_tlbelo1_v,
+   output             dtlb_csr_tlbelo1_d,
+   output [1:0]       dtlb_csr_tlbelo1_mat,
+   output [1:0]       dtlb_csr_tlbelo1_plv,
+   output [19:0]      dtlb_csr_tlbelo1_ppn,
+   output [9:0]       dtlb_csr_asid_asid 
 );
 
    wire da_mode = csr_lsu_crmd_da;
@@ -295,12 +325,15 @@ module c7blsu(
    wire [ 1:0] tlb_s_mat;
    wire [ 1:0] tlb_s_plv;
 
-   wire tlb_res_vld;
+   wire tlb_res_vld_ls2;
+   wire tlbr_exception_ls2;
+
+   assign tlbr_exception_ls2 = tlb_res_vld_ls2 & ~tlb_s_found; // uty: test
 
    assign tlb_s_vld = lsu_valid_ls1 & pg_mode & ~(match_dmw0 | match_dmw1);
    assign tlb_s_vppn = lsu_addr_ls1[31:13];
    assign tlb_s_odd_page = lsu_addr_ls1[12];
-   assign tlb_s_asid = 10'b0;
+   assign tlb_s_asid = csr_dtlb_asid_asid;
 
    // Physical address generation
    // - Direct address mode (DA=1, PG=0): clear high 3 bits
@@ -319,15 +352,34 @@ module c7blsu(
                                   : (match_dmw1 ? {csr_lsu_dmw1_pseg, lsu_addr_ls2[28:0]}
                                                 : {tlb_s_pfn, lsu_addr_ls2[11:0]}));
 
+   wire dtlb_we;
+   assign dtlb_we = (csr_dtlb_tlbfill_vld_e | csr_dtlb_tlbwr_vld_e) & csr_dtlb_tlbidx_i_d;
+
+   wire [4:0] dtlb_w_index;
+   assign dtlb_w_index = csr_dtlb_tlbfill_vld_e ? exu_dtlb_random_index :
+                        (csr_dtlb_tlbwr_vld_e   ? csr_dtlb_tlbidx_index : 5'b0); 
+
+   assign dtlb_csr_tlbidx_index = tlb_s_index;
+
+   wire tlbidx_e;
+   assign dtlb_csr_tlbidx_e = exu_dtlb_tlbsrch_vld_m ? tlb_s_found : tlbidx_e;
+
+   wire dtlb_inv_en;
+   assign dtlb_inv_en = exu_dtlb_invtlb_vld_e & csr_dtlb_tlbidx_i_d; 
+   //assign dtlb_inv_en = exu_dtlb_invtlb_vld_e; 
+
+
    c7btlb u_dtlb(
       .clk                             (clk),
       .resetn                          (resetn),
 
       // search port
-      .s_vld                           (tlb_s_vld),
-      .s_vppn                          (tlb_s_vppn),
+      .s_vld                           (tlb_s_vld | exu_dtlb_tlbsrch_vld_e),
+      //.s_vppn                          (tlb_s_vppn),
+      .s_vppn                          (exu_dtlb_tlbsrch_vld_e ? csr_dtlb_tlbehi_vppn : tlb_s_vppn),
       .s_odd_page                      (tlb_s_odd_page),
-      .s_asid                          (tlb_s_asid),
+      //.s_asid                          (tlb_s_asid),
+      .s_asid                          (exu_dtlb_tlbsrch_vld_e ? csr_dtlb_asid_asid : tlb_s_asid),
       .s_found                         (tlb_s_found),
       .s_index                         (tlb_s_index),
       .s_pfn                           (tlb_s_pfn),
@@ -337,10 +389,10 @@ module c7blsu(
       .s_plv                           (tlb_s_plv),
 
       // write port
-      .we                              (csr_dtlb_tlbfill_vld_e),
-      .w_index                         (csr_dtlb_tlbfill_vld_e ? exu_dtlb_random_index : csr_dtlb_tlbidx_index),
+      .we                              (dtlb_we),
+      .w_index                         (dtlb_w_index),
       .w_vppn                          (csr_dtlb_tlbehi_vppn),
-      .w_asid                          (10'b0),
+      .w_asid                          (csr_dtlb_asid_asid),
       .w_g                             (csr_dtlb_tlbelo0_g & csr_dtlb_tlbelo1_g),
       .w_ps                            (csr_dtlb_tlbidx_ps),
       .w_e                             (csr_dtlb_tlbrefill_ctx ? 1'b1 : ~csr_dtlb_tlbidx_ne),
@@ -356,28 +408,29 @@ module c7blsu(
       .w_ppn1                          (csr_dtlb_tlbelo1_ppn),
 
       // read port
-      .r_index                         (),
-      .r_vppn                          (),
-      .r_asid                          (),
-      .r_g                             (),
-      .r_ps                            (),
-      .r_e                             (),
-      .r_v0                            (),
-      .r_d0                            (),
-      .r_mat0                          (),
-      .r_plv0                          (),
-      .r_ppn0                          (),
-      .r_v1                            (),
-      .r_d1                            (),
-      .r_mat1                          (),
-      .r_plv1                          (),
-      .r_ppn1                          (),
+      .r_index                         (csr_dtlb_tlbidx_index),
+      .r_vppn                          (dtlb_csr_tlbehi_vppn),
+      .r_asid                          (dtlb_csr_asid_asid),
+      .r_g                             (dtlb_csr_tlbelo_g),
+      .r_ps                            (dtlb_csr_tlbidx_ps),
+      //.r_e                             (dtlb_csr_tlbidx_e),
+      .r_e                             (tlbidx_e),
+      .r_v0                            (dtlb_csr_tlbelo0_v),
+      .r_d0                            (dtlb_csr_tlbelo0_d),
+      .r_mat0                          (dtlb_csr_tlbelo0_mat),
+      .r_plv0                          (dtlb_csr_tlbelo0_plv),
+      .r_ppn0                          (dtlb_csr_tlbelo0_ppn),
+      .r_v1                            (dtlb_csr_tlbelo1_v),
+      .r_d1                            (dtlb_csr_tlbelo1_d),
+      .r_mat1                          (dtlb_csr_tlbelo1_mat),
+      .r_plv1                          (dtlb_csr_tlbelo1_plv),
+      .r_ppn1                          (dtlb_csr_tlbelo1_ppn),
 
       // invalid port
-      .inv_en                          (),
-      .inv_op                          (),
-      .inv_asid                        (),
-      .inv_vppn                        ()
+      .inv_en                          (dtlb_inv_en),
+      .inv_op                          (exu_dtlb_invtlb_op_e),
+      .inv_asid                        (exu_dtlb_invtlb_asid_e),
+      .inv_vppn                        (exu_dtlb_invtlb_vppn_e)
    );
 
 
@@ -428,7 +481,9 @@ module c7blsu(
    wire biu_rd_req_in;
    wire biu_rd_req_q;
 
-   assign biu_rd_req_in = (biu_rd_req_q & ~biu_lsu_rd_ack_ls2) | (lsu_valid_ls2 & lsu_load_ls2);
+   //assign biu_rd_req_in = (biu_rd_req_q & ~biu_lsu_rd_ack_ls2) | (lsu_valid_ls2 & lsu_load_ls2);
+   //assign biu_rd_req_in = (biu_rd_req_q & ~(biu_lsu_rd_ack_ls2 | tlbr_exception_ls2)) | (lsu_valid_ls2 & lsu_load_ls2);
+   assign biu_rd_req_in = (~(biu_lsu_rd_ack_ls2 | tlbr_exception_ls2)) & ((lsu_valid_ls2 & lsu_load_ls2) | biu_rd_req_q);
 
    dffrl_ns #(1) biu_rd_req_reg (
       .din   (biu_rd_req_in),
@@ -438,6 +493,7 @@ module c7blsu(
       //.se(), .si(), .so());
 
    assign lsu_biu_rd_req_ls2 = biu_rd_req_q;
+   //assign lsu_biu_rd_req_ls2 = biu_rd_req_q & (da_mode | match_dmw0 | match_dmw1 | (tlb_s_found & tlb_s_v));
 
    //assign lsu_biu_rd_addr_ls2 = {lsu_addr_ls2[31:3], 3'b000}; // 64-bit align
    //assign lsu_biu_rd_addr_ls2 = lsu_addr_ls2;
@@ -455,8 +511,11 @@ module c7blsu(
    
    wire biu_wr_req_in;
    wire biu_wr_req_q;
+   
 
-   assign biu_wr_req_in = (biu_wr_req_q & ~biu_lsu_wr_ack_ls2) | (lsu_valid_ls2 & lsu_store_ls2);
+   //assign biu_wr_req_in = (biu_wr_req_q & ~biu_lsu_wr_ack_ls2) | (lsu_valid_ls2 & lsu_store_ls2);
+   //assign biu_wr_req_in = (biu_wr_req_q & ~(biu_lsu_wr_ack_ls2 | tlbr_exception_ls2)) | (lsu_valid_ls2 & lsu_store_ls2);
+   assign biu_wr_req_in = (~(biu_lsu_wr_ack_ls2 | tlbr_exception_ls2)) & ((lsu_valid_ls2 & lsu_store_ls2) | biu_wr_req_q);
 
    dffrl_ns #(1) biu_wr_req_reg (
       .din   (biu_wr_req_in),
@@ -466,6 +525,7 @@ module c7blsu(
       //.se(), .si(), .so());
 
    assign lsu_biu_wr_req_ls2 = biu_wr_req_q;
+   //assign lsu_biu_wr_req_ls2 = biu_wr_req_q & (da_mode | match_dmw0 | match_dmw1 | (tlb_s_found & tlb_s_v));
 
    //assign lsu_biu_wr_addr_ls2 = {lsu_addr_ls2[31:3], 3'b000}; // 64-bit align
    //assign lsu_biu_wr_addr_ls2 = lsu_addr_ls2;
@@ -719,6 +779,14 @@ module c7blsu(
       .en (lsu_valid_ls1),
       .q   (lsu_scw_q));
 
+
+   dffrl_ns #(1) tlb_res_vld_reg (
+      .din (tlb_s_vld),
+      .clk (clk),
+      .rst_l (resetn),
+      .q   (tlb_res_vld_ls2));
+
+
    assign lsu_sc = lsu_scw_q;
 
    assign lsu_ecl_except_buserr_ls3 = biu_lsu_fault_ls3 | biu_lsu_wr_fault_ls3;
@@ -727,5 +795,8 @@ module c7blsu(
 
    // Unimplmented signals
    assign lsu_ecl_except_ecc_ls3 = 1'b0;
+
+   assign lsu_ecl_except_tlbr_ls2 = tlbr_exception_ls2;
+   assign lsu_ecl_except_tlbr_badv_ls2 = lsu_addr_ls2;
 
 endmodule
