@@ -25,6 +25,10 @@ wire lsu_ecl_except_buserr_ls3;
 wire lsu_ecl_except_ecc_ls3;
 wire [31:0] lsu_ecl_except_buserr_badv_ls3;
 
+// New exception outputs
+wire lsu_ecl_except_tlbr_ls2;
+wire [31:0] lsu_ecl_except_tlbr_badv_ls2;
+
 // New output signals for ibar/dbar/sc and LL/SC
 wire lsu_ecl_ibar_fin;
 wire lsu_ecl_dbar_fin;
@@ -63,7 +67,7 @@ wire [2:0] csr_lsu_dmw0_vseg = 3'b0;
 wire [2:0] csr_lsu_dmw1_pseg = 3'b0;
 wire [2:0] csr_lsu_dmw1_vseg = 3'b0;
 
-// *** NEW: TLB output ports from DUT (must be connected) ***
+// TLB output ports from DUT (must be connected)
 wire [18:0] csr_dtlb_tlbehi_vppn;
 wire        csr_dtlb_tlbidx_ne;
 wire [5:0]  csr_dtlb_tlbidx_ps;
@@ -83,6 +87,35 @@ wire        csr_dtlb_tlbelo1_v;
 wire        csr_dtlb_tlbrefill_ctx;
 wire [4:0]  exu_dtlb_random_index;
 wire        csr_dtlb_tlbfill_vld_e;
+
+// New TLB inputs (driven from test)
+reg csr_dtlb_tlbidx_i_d;
+reg [9:0] csr_dtlb_asid_asid;
+reg csr_dtlb_tlbwr_vld_e;
+reg exu_dtlb_tlbsrch_vld_e;
+reg exu_dtlb_tlbsrch_vld_m;
+reg exu_dtlb_invtlb_vld_e;
+reg [4:0] exu_dtlb_invtlb_op_e;
+reg [9:0] exu_dtlb_invtlb_asid_e;
+reg [18:0] exu_dtlb_invtlb_vppn_e;
+
+// DTLB readback outputs (from DUT, unused)
+wire [4:0]  dtlb_csr_tlbidx_index;
+wire [18:0] dtlb_csr_tlbehi_vppn;
+wire        dtlb_csr_tlbelo_g;
+wire [5:0]  dtlb_csr_tlbidx_ps;
+wire        dtlb_csr_tlbidx_e;
+wire        dtlb_csr_tlbelo0_v;
+wire        dtlb_csr_tlbelo0_d;
+wire [1:0]  dtlb_csr_tlbelo0_mat;
+wire [1:0]  dtlb_csr_tlbelo0_plv;
+wire [19:0] dtlb_csr_tlbelo0_ppn;
+wire        dtlb_csr_tlbelo1_v;
+wire        dtlb_csr_tlbelo1_d;
+wire [1:0]  dtlb_csr_tlbelo1_mat;
+wire [1:0]  dtlb_csr_tlbelo1_plv;
+wire [19:0] dtlb_csr_tlbelo1_ppn;
+wire [9:0]  dtlb_csr_asid_asid;
 
 // DUT instantiation
 c7blsu uut (
@@ -107,6 +140,10 @@ c7blsu uut (
     .lsu_ecl_except_ecc_ls3(lsu_ecl_except_ecc_ls3),
     .lsu_ecl_except_buserr_badv_ls3(lsu_ecl_except_buserr_badv_ls3),
     
+    // New exception outputs
+    .lsu_ecl_except_tlbr_ls2(lsu_ecl_except_tlbr_ls2),
+    .lsu_ecl_except_tlbr_badv_ls2(lsu_ecl_except_tlbr_badv_ls2),
+    
     .lsu_ecl_ibar_fin(lsu_ecl_ibar_fin),
     .lsu_ecl_dbar_fin(lsu_ecl_dbar_fin),
     .lsu_ecl_sc_fin_ls1(lsu_ecl_sc_fin_ls1),
@@ -123,7 +160,7 @@ c7blsu uut (
     .csr_lsu_dmw1_pseg(csr_lsu_dmw1_pseg),
     .csr_lsu_dmw1_vseg(csr_lsu_dmw1_vseg),
     
-    // *** NEW: TLB outputs ***
+    // TLB outputs (existing)
     .csr_dtlb_tlbehi_vppn(csr_dtlb_tlbehi_vppn),
     .csr_dtlb_tlbidx_ne(csr_dtlb_tlbidx_ne),
     .csr_dtlb_tlbidx_ps(csr_dtlb_tlbidx_ps),
@@ -143,6 +180,35 @@ c7blsu uut (
     .csr_dtlb_tlbrefill_ctx(csr_dtlb_tlbrefill_ctx),
     .exu_dtlb_random_index(exu_dtlb_random_index),
     .csr_dtlb_tlbfill_vld_e(csr_dtlb_tlbfill_vld_e),
+    
+    // New TLB inputs
+    .csr_dtlb_tlbidx_i_d(csr_dtlb_tlbidx_i_d),
+    .csr_dtlb_asid_asid(csr_dtlb_asid_asid),
+    .csr_dtlb_tlbwr_vld_e(csr_dtlb_tlbwr_vld_e),
+    .exu_dtlb_tlbsrch_vld_e(exu_dtlb_tlbsrch_vld_e),
+    .exu_dtlb_tlbsrch_vld_m(exu_dtlb_tlbsrch_vld_m),
+    .exu_dtlb_invtlb_vld_e(exu_dtlb_invtlb_vld_e),
+    .exu_dtlb_invtlb_op_e(exu_dtlb_invtlb_op_e),
+    .exu_dtlb_invtlb_asid_e(exu_dtlb_invtlb_asid_e),
+    .exu_dtlb_invtlb_vppn_e(exu_dtlb_invtlb_vppn_e),
+    
+    // DTLB readback outputs (unused)
+    .dtlb_csr_tlbidx_index(dtlb_csr_tlbidx_index),
+    .dtlb_csr_tlbehi_vppn(dtlb_csr_tlbehi_vppn),
+    .dtlb_csr_tlbelo_g(dtlb_csr_tlbelo_g),
+    .dtlb_csr_tlbidx_ps(dtlb_csr_tlbidx_ps),
+    .dtlb_csr_tlbidx_e(dtlb_csr_tlbidx_e),
+    .dtlb_csr_tlbelo0_v(dtlb_csr_tlbelo0_v),
+    .dtlb_csr_tlbelo0_d(dtlb_csr_tlbelo0_d),
+    .dtlb_csr_tlbelo0_mat(dtlb_csr_tlbelo0_mat),
+    .dtlb_csr_tlbelo0_plv(dtlb_csr_tlbelo0_plv),
+    .dtlb_csr_tlbelo0_ppn(dtlb_csr_tlbelo0_ppn),
+    .dtlb_csr_tlbelo1_v(dtlb_csr_tlbelo1_v),
+    .dtlb_csr_tlbelo1_d(dtlb_csr_tlbelo1_d),
+    .dtlb_csr_tlbelo1_mat(dtlb_csr_tlbelo1_mat),
+    .dtlb_csr_tlbelo1_plv(dtlb_csr_tlbelo1_plv),
+    .dtlb_csr_tlbelo1_ppn(dtlb_csr_tlbelo1_ppn),
+    .dtlb_csr_asid_asid(dtlb_csr_asid_asid),
     
     // BIU interface
     .lsu_biu_rd_req_ls2(lsu_biu_rd_req_ls2),
@@ -211,6 +277,17 @@ initial begin
     
     // Initialize LL/SC CSR input
     csr_lsu_llb = 0;
+    
+    // Initialize new TLB inputs to 0
+    csr_dtlb_tlbidx_i_d     = 1'b0;
+    csr_dtlb_asid_asid      = 10'b0;
+    csr_dtlb_tlbwr_vld_e    = 1'b0;
+    exu_dtlb_tlbsrch_vld_e  = 1'b0;
+    exu_dtlb_tlbsrch_vld_m  = 1'b0;
+    exu_dtlb_invtlb_vld_e   = 1'b0;
+    exu_dtlb_invtlb_op_e    = 5'b0;
+    exu_dtlb_invtlb_asid_e  = 10'b0;
+    exu_dtlb_invtlb_vppn_e  = 19'b0;
     
     test_count = 0;
     error_count = 0;
