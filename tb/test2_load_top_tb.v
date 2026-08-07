@@ -26,9 +26,19 @@ wire lsu_ecl_except_buserr_ls3;
 wire lsu_ecl_except_ecc_ls3;
 wire [31:0] lsu_ecl_except_buserr_badv_ls3;
 
-// New exception outputs
+// Exception outputs
 wire lsu_ecl_except_tlbr_ls2;
 wire [31:0] lsu_ecl_except_tlbr_badv_ls2;
+
+// New detailed exception outputs
+wire lsu_except_pil_ls2;
+wire [31:0] lsu_except_pil_badv_ls2;
+wire lsu_except_pis_ls2;
+wire [31:0] lsu_except_pis_badv_ls2;
+wire lsu_except_ppi_ls2;
+wire [31:0] lsu_except_ppi_badv_ls2;
+wire lsu_except_pme_ls2;
+wire [31:0] lsu_except_pme_badv_ls2;
 
 // ibar/dbar finish outputs
 wire lsu_ecl_ibar_fin;
@@ -80,6 +90,9 @@ reg exu_dtlb_invtlb_vld_e;
 reg [4:0] exu_dtlb_invtlb_op_e;
 reg [9:0] exu_dtlb_invtlb_asid_e;
 reg [18:0] exu_dtlb_invtlb_vppn_e;
+
+// New input for privilege level (for PPI detection)
+reg [1:0] csr_dtlb_crmd_plv;
 
 // DTLB readback outputs (from DUT, unused)
 wire [4:0]  dtlb_csr_tlbidx_index;
@@ -152,6 +165,14 @@ c7blsu dut (
     // New exception outputs
     .lsu_ecl_except_tlbr_ls2(lsu_ecl_except_tlbr_ls2),
     .lsu_ecl_except_tlbr_badv_ls2(lsu_ecl_except_tlbr_badv_ls2),
+    .lsu_except_pil_ls2(lsu_except_pil_ls2),
+    .lsu_except_pil_badv_ls2(lsu_except_pil_badv_ls2),
+    .lsu_except_pis_ls2(lsu_except_pis_ls2),
+    .lsu_except_pis_badv_ls2(lsu_except_pis_badv_ls2),
+    .lsu_except_ppi_ls2(lsu_except_ppi_ls2),
+    .lsu_except_ppi_badv_ls2(lsu_except_ppi_badv_ls2),
+    .lsu_except_pme_ls2(lsu_except_pme_ls2),
+    .lsu_except_pme_badv_ls2(lsu_except_pme_badv_ls2),
     
     .lsu_ecl_ibar_fin(lsu_ecl_ibar_fin),
     .lsu_ecl_dbar_fin(lsu_ecl_dbar_fin),
@@ -200,6 +221,8 @@ c7blsu dut (
     .exu_dtlb_invtlb_op_e(exu_dtlb_invtlb_op_e),
     .exu_dtlb_invtlb_asid_e(exu_dtlb_invtlb_asid_e),
     .exu_dtlb_invtlb_vppn_e(exu_dtlb_invtlb_vppn_e),
+    
+    .csr_dtlb_crmd_plv(csr_dtlb_crmd_plv),
     
     // DTLB readback outputs (unused)
     .dtlb_csr_tlbidx_index(dtlb_csr_tlbidx_index),
@@ -271,6 +294,7 @@ begin
     exu_dtlb_invtlb_op_e    = 5'b0;
     exu_dtlb_invtlb_asid_e  = 10'b0;
     exu_dtlb_invtlb_vppn_e  = 19'b0;
+    csr_dtlb_crmd_plv       = 2'b0;
     
     expected_addr = 0;
     expected_data = 0;
