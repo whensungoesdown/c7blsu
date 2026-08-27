@@ -174,8 +174,11 @@ module c7blsu(
    wire da_mode = csr_lsu_crmd_da;
    wire pg_mode = ~csr_lsu_crmd_da & csr_lsu_crmd_pg;
 
-   wire match_dmw0; 
-   wire match_dmw1; 
+   wire match_dmw0_ls1; 
+   wire match_dmw1_ls1; 
+
+   wire match_dmw0_ls2; 
+   wire match_dmw1_ls2; 
 
    wire               lsu_valid_ls1;
    wire               lsu_valid_ls2;
@@ -350,7 +353,7 @@ module c7blsu(
    assign ppi_exception_ls2 = tlb_res_vld_ls2 & tlb_s_found & tlb_s_v & (csr_dtlb_crmd_plv > tlb_s_plv);
    assign pme_exception_ls2 = tlb_res_vld_ls2 & tlb_s_found & tlb_s_v & ~tlb_s_d & lsu_store_ls2;
 
-   assign tlb_s_vld = lsu_valid_ls1 & pg_mode & ~(match_dmw0 | match_dmw1);
+   assign tlb_s_vld = lsu_valid_ls1 & pg_mode & ~(match_dmw0_ls1 | match_dmw1_ls1);
    assign tlb_s_vppn = lsu_addr_ls1[31:13];
    assign tlb_s_odd_page = lsu_addr_ls1[12];
    assign tlb_s_asid = csr_dtlb_asid_asid;
@@ -360,17 +363,19 @@ module c7blsu(
    // - Mapped address mode (DA=0, PG=1):
    //   - If DMW0 hit, use DMW0 direct mapping
    //   - Otherwise use TLB translation result
-   assign match_dmw0 = (lsu_addr_ls2[31:29] == csr_lsu_dmw0_vseg);
-   assign match_dmw1 = (lsu_addr_ls2[31:29] == csr_lsu_dmw1_vseg);
+   assign match_dmw0_ls1 = (lsu_addr_ls1[31:29] == csr_lsu_dmw0_vseg);
+   assign match_dmw1_ls1 = (lsu_addr_ls1[31:29] == csr_lsu_dmw1_vseg);
+   assign match_dmw0_ls2 = (lsu_addr_ls2[31:29] == csr_lsu_dmw0_vseg);
+   assign match_dmw1_ls2 = (lsu_addr_ls2[31:29] == csr_lsu_dmw1_vseg);
 
    // ---------- Generate physical address ----------
    // Physical address = PFN (20 bits) concatenated with page offset (12 bits)
    // This is valid only when tlb_s_found is 1; otherwise the value is meaningless.
    // Physical address with DMW0 priority over DMW1
    assign lsu_paddr_ls2 = da_mode ? (lsu_addr_ls2 & 32'h1FFFFFFF)  // not affect 0x1c000000
-                                  : (match_dmw0 ? {csr_lsu_dmw0_pseg, lsu_addr_ls2[28:0]}
-                                  : (match_dmw1 ? {csr_lsu_dmw1_pseg, lsu_addr_ls2[28:0]}
-                                                : {tlb_s_pfn, lsu_addr_ls2[11:0]}));
+                                  : (match_dmw0_ls2 ? {csr_lsu_dmw0_pseg, lsu_addr_ls2[28:0]}
+                                  : (match_dmw1_ls2 ? {csr_lsu_dmw1_pseg, lsu_addr_ls2[28:0]}
+                                                    : {tlb_s_pfn, lsu_addr_ls2[11:0]}));
 
    wire dtlb_we;
    assign dtlb_we = (csr_dtlb_tlbfill_vld_e | csr_dtlb_tlbwr_vld_e) & csr_dtlb_tlbidx_i_d;
