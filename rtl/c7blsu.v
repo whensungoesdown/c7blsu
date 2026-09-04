@@ -204,8 +204,8 @@ module c7blsu(
    wire [31:0]        lsu_paddr_ls2;
 
 
-   wire lsu_dbar_ls1 = ecl_lsu_ibar_e;
-   wire lsu_ibar_ls1 = ecl_lsu_dbar_e;
+   wire lsu_dbar_ls1 = ecl_lsu_dbar_e;
+   wire lsu_ibar_ls1 = ecl_lsu_ibar_e;
 
    wire lsu_scw_q; // record whether this is a scw instrution for later use
 
@@ -353,7 +353,10 @@ module c7blsu(
    assign ppi_exception_ls2 = tlb_res_vld_ls2 & tlb_s_found & tlb_s_v & (csr_dtlb_crmd_plv > tlb_s_plv);
    assign pme_exception_ls2 = tlb_res_vld_ls2 & tlb_s_found & tlb_s_v & ~tlb_s_d & lsu_store_ls2;
 
-   assign tlb_s_vld = lsu_valid_ls1 & pg_mode & ~(match_dmw0_ls1 | match_dmw1_ls1);
+   //assign tlb_s_vld = lsu_valid_ls1 & pg_mode & ~(match_dmw0_ls1 | match_dmw1_ls1);
+   // has to be load or store operations, for example, ibar and dbar do not
+   // need tlb address translation
+   assign tlb_s_vld = (lsu_valid_ls1 & (lsu_load_ls1 | lsu_store_ls1)) & pg_mode & ~(match_dmw0_ls1 | match_dmw1_ls1);
    assign tlb_s_vppn = lsu_addr_ls1[31:13];
    assign tlb_s_odd_page = lsu_addr_ls1[12];
    assign tlb_s_asid = csr_dtlb_asid_asid;
