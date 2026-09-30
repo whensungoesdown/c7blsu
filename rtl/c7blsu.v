@@ -174,14 +174,15 @@ module c7blsu(
    wire da_mode = csr_lsu_crmd_da;
    wire pg_mode = ~csr_lsu_crmd_da & csr_lsu_crmd_pg;
 
-   wire match_dmw0_ls1; 
-   wire match_dmw1_ls1; 
+   //wire match_dmw0_ls1; 
+   //wire match_dmw1_ls1; 
 
    wire match_dmw0_ls2; 
    wire match_dmw1_ls2; 
 
    wire               lsu_valid_ls1;
    wire               lsu_valid_ls2;
+   wire               lsu_valid_ls2_dly1;
    wire [6:0]         lsu_op_ls1;
    wire [31:0]        lsu_base_ls1;
    wire [31:0]        lsu_offset_ls1;
@@ -356,9 +357,13 @@ module c7blsu(
    //assign tlb_s_vld = lsu_valid_ls1 & pg_mode & ~(match_dmw0_ls1 | match_dmw1_ls1);
    // has to be load or store operations, for example, ibar and dbar do not
    // need tlb address translation
-   assign tlb_s_vld = (lsu_valid_ls1 & (lsu_load_ls1 | lsu_store_ls1)) & pg_mode & ~(match_dmw0_ls1 | match_dmw1_ls1);
-   assign tlb_s_vppn = lsu_addr_ls1[31:13];
-   assign tlb_s_odd_page = lsu_addr_ls1[12];
+   //  uty: test
+   //assign tlb_s_vld = (lsu_valid_ls1 & (lsu_load_ls1 | lsu_store_ls1)) & pg_mode & ~(match_dmw0_ls1 | match_dmw1_ls1);
+   assign tlb_s_vld = (lsu_valid_ls2 & (lsu_load_ls2 | lsu_store_ls2)) & pg_mode & ~(match_dmw0_ls2 | match_dmw1_ls2);
+   //assign tlb_s_vppn = lsu_addr_ls1[31:13];
+   assign tlb_s_vppn = lsu_addr_ls2[31:13];
+   //assign tlb_s_odd_page = lsu_addr_ls1[12];
+   assign tlb_s_odd_page = lsu_addr_ls2[12];
    assign tlb_s_asid = csr_dtlb_asid_asid;
 
    // Physical address generation
@@ -366,8 +371,9 @@ module c7blsu(
    // - Mapped address mode (DA=0, PG=1):
    //   - If DMW0 hit, use DMW0 direct mapping
    //   - Otherwise use TLB translation result
-   assign match_dmw0_ls1 = (lsu_addr_ls1[31:29] == csr_lsu_dmw0_vseg);
-   assign match_dmw1_ls1 = (lsu_addr_ls1[31:29] == csr_lsu_dmw1_vseg);
+   //   uty: test
+   //assign match_dmw0_ls1 = (lsu_addr_ls1[31:29] == csr_lsu_dmw0_vseg);
+   //assign match_dmw1_ls1 = (lsu_addr_ls1[31:29] == csr_lsu_dmw1_vseg);
    assign match_dmw0_ls2 = (lsu_addr_ls2[31:29] == csr_lsu_dmw0_vseg);
    assign match_dmw1_ls2 = (lsu_addr_ls2[31:29] == csr_lsu_dmw1_vseg);
 
@@ -515,7 +521,8 @@ module c7blsu(
    //
    // tlb_related_exceptions contains pis and pme, which are not suppose to
    // happen during a ld
-   assign biu_rd_req_in = (~(biu_lsu_rd_ack_ls2 | tlbr_exception_ls2 | pil_exception_ls2 | ppi_exception_ls2)) & ((lsu_valid_ls2 & lsu_load_ls2) | biu_rd_req_q);
+   //assign biu_rd_req_in = (~(biu_lsu_rd_ack_ls2 | tlbr_exception_ls2 | pil_exception_ls2 | ppi_exception_ls2)) & ((lsu_valid_ls2 & lsu_load_ls2) | biu_rd_req_q);
+   assign biu_rd_req_in = (~(biu_lsu_rd_ack_ls2 | tlbr_exception_ls2 | pil_exception_ls2 | ppi_exception_ls2)) & ((lsu_valid_ls2_dly1 & lsu_load_ls2) | biu_rd_req_q);
 
    dffrl_ns #(1) biu_rd_req_reg (
       .din   (biu_rd_req_in),
@@ -548,7 +555,8 @@ module c7blsu(
    //assign biu_wr_req_in = (biu_wr_req_q & ~biu_lsu_wr_ack_ls2) | (lsu_valid_ls2 & lsu_store_ls2);
    //assign biu_wr_req_in = (biu_wr_req_q & ~(biu_lsu_wr_ack_ls2 | tlbr_exception_ls2)) | (lsu_valid_ls2 & lsu_store_ls2);
    //assign biu_wr_req_in = (~(biu_lsu_wr_ack_ls2 | tlbr_exception_ls2)) & ((lsu_valid_ls2 & lsu_store_ls2) | biu_wr_req_q);
-   assign biu_wr_req_in = (~(biu_lsu_wr_ack_ls2 | tlbr_exception_ls2 | pis_exception_ls2 | ppi_exception_ls2 | pme_exception_ls2)) & ((lsu_valid_ls2 & lsu_store_ls2) | biu_wr_req_q);
+   //assign biu_wr_req_in = (~(biu_lsu_wr_ack_ls2 | tlbr_exception_ls2 | pis_exception_ls2 | ppi_exception_ls2 | pme_exception_ls2)) & ((lsu_valid_ls2 & lsu_store_ls2) | biu_wr_req_q);
+   assign biu_wr_req_in = (~(biu_lsu_wr_ack_ls2 | tlbr_exception_ls2 | pis_exception_ls2 | ppi_exception_ls2 | pme_exception_ls2)) & ((lsu_valid_ls2_dly1 & lsu_store_ls2) | biu_wr_req_q);
 
    dffrl_ns #(1) biu_wr_req_reg (
       .din   (biu_wr_req_in),
@@ -660,6 +668,12 @@ module c7blsu(
       .rst_l (resetn),
       .q   (lsu_valid_ls2));
       //.se(), .si(), .so());
+      //
+   dffrl_ns #(1) lsu_valid_ls2_dly1_reg (
+      .din (lsu_valid_ls2),
+      .clk (clk),
+      .rst_l (resetn),
+      .q   (lsu_valid_ls2_dly1));
 
    // lsu_valid_ls3 
   
