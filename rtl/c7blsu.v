@@ -325,7 +325,7 @@ module c7blsu(
    //
 
    // ---------- TLB search port signals ----------
-   wire        tlb_s_vld;
+   wire        tlb_s_vld_ls2;
    wire [18:0] tlb_s_vppn;     // VPN2 (19 bits)
    wire        tlb_s_odd_page;
    wire [ 9:0] tlb_s_asid;
@@ -337,29 +337,29 @@ module c7blsu(
    wire [ 1:0] tlb_s_mat;
    wire [ 1:0] tlb_s_plv;
 
-   wire tlb_res_vld_ls2;
-   wire tlbr_exception_ls2;
-   wire pil_exception_ls2;
-   wire pis_exception_ls2;
-   wire ppi_exception_ls2;
-   wire pme_exception_ls2;
+   wire tlb_res_vld_ls2_dly1;
+   wire tlbr_exception_ls2_dly1;
+   wire pil_exception_ls2_dly1;
+   wire pis_exception_ls2_dly1;
+   wire ppi_exception_ls2_dly1;
+   wire pme_exception_ls2_dly1;
 
    //wire tlb_related_exceptions;
    //assign tlb_related_exceptions = tlbr_exception_ls2 | pil_exception_ls2 | pis_exception_ls2 | pme_exception_ls2;
 
-   assign tlbr_exception_ls2 = tlb_res_vld_ls2 & ~tlb_s_found; // uty: test
+   assign tlbr_exception_ls2_dly1 = tlb_res_vld_ls2_dly1 & ~tlb_s_found; // uty: test
 
-   assign pil_exception_ls2 = tlb_res_vld_ls2 & tlb_s_found & ~tlb_s_v & lsu_load_ls2;
-   assign pis_exception_ls2 = tlb_res_vld_ls2 & tlb_s_found & ~tlb_s_v & lsu_store_ls2;
-   assign ppi_exception_ls2 = tlb_res_vld_ls2 & tlb_s_found & tlb_s_v & (csr_dtlb_crmd_plv > tlb_s_plv);
-   assign pme_exception_ls2 = tlb_res_vld_ls2 & tlb_s_found & tlb_s_v & ~tlb_s_d & lsu_store_ls2;
+   assign pil_exception_ls2_dly1 = tlb_res_vld_ls2_dly1 & tlb_s_found & ~tlb_s_v & lsu_load_ls2;
+   assign pis_exception_ls2_dly1 = tlb_res_vld_ls2_dly1 & tlb_s_found & ~tlb_s_v & lsu_store_ls2;
+   assign ppi_exception_ls2_dly1 = tlb_res_vld_ls2_dly1 & tlb_s_found & tlb_s_v & (csr_dtlb_crmd_plv > tlb_s_plv);
+   assign pme_exception_ls2_dly1 = tlb_res_vld_ls2_dly1 & tlb_s_found & tlb_s_v & ~tlb_s_d & lsu_store_ls2;
 
    //assign tlb_s_vld = lsu_valid_ls1 & pg_mode & ~(match_dmw0_ls1 | match_dmw1_ls1);
    // has to be load or store operations, for example, ibar and dbar do not
    // need tlb address translation
    //  uty: test
    //assign tlb_s_vld = (lsu_valid_ls1 & (lsu_load_ls1 | lsu_store_ls1)) & pg_mode & ~(match_dmw0_ls1 | match_dmw1_ls1);
-   assign tlb_s_vld = (lsu_valid_ls2 & (lsu_load_ls2 | lsu_store_ls2)) & pg_mode & ~(match_dmw0_ls2 | match_dmw1_ls2);
+   assign tlb_s_vld_ls2 = (lsu_valid_ls2 & (lsu_load_ls2 | lsu_store_ls2)) & pg_mode & ~(match_dmw0_ls2 | match_dmw1_ls2);
    //assign tlb_s_vppn = lsu_addr_ls1[31:13];
    assign tlb_s_vppn = lsu_addr_ls2[31:13];
    //assign tlb_s_odd_page = lsu_addr_ls1[12];
@@ -408,7 +408,7 @@ module c7blsu(
       .resetn                          (resetn),
 
       // search port
-      .s_vld                           (tlb_s_vld | exu_dtlb_tlbsrch_vld_e),
+      .s_vld                           (tlb_s_vld_ls2 | exu_dtlb_tlbsrch_vld_e),
       //.s_vppn                          (tlb_s_vppn),
       .s_vppn                          (exu_dtlb_tlbsrch_vld_e ? csr_dtlb_tlbehi_vppn : tlb_s_vppn),
       .s_odd_page                      (tlb_s_odd_page),
@@ -522,7 +522,7 @@ module c7blsu(
    // tlb_related_exceptions contains pis and pme, which are not suppose to
    // happen during a ld
    //assign biu_rd_req_in = (~(biu_lsu_rd_ack_ls2 | tlbr_exception_ls2 | pil_exception_ls2 | ppi_exception_ls2)) & ((lsu_valid_ls2 & lsu_load_ls2) | biu_rd_req_q);
-   assign biu_rd_req_in = (~(biu_lsu_rd_ack_ls2 | tlbr_exception_ls2 | pil_exception_ls2 | ppi_exception_ls2)) & ((lsu_valid_ls2_dly1 & lsu_load_ls2) | biu_rd_req_q);
+   assign biu_rd_req_in = (~(biu_lsu_rd_ack_ls2 | tlbr_exception_ls2_dly1 | pil_exception_ls2_dly1 | ppi_exception_ls2_dly1)) & ((lsu_valid_ls2_dly1 & lsu_load_ls2) | biu_rd_req_q);
 
    dffrl_ns #(1) biu_rd_req_reg (
       .din   (biu_rd_req_in),
@@ -556,7 +556,7 @@ module c7blsu(
    //assign biu_wr_req_in = (biu_wr_req_q & ~(biu_lsu_wr_ack_ls2 | tlbr_exception_ls2)) | (lsu_valid_ls2 & lsu_store_ls2);
    //assign biu_wr_req_in = (~(biu_lsu_wr_ack_ls2 | tlbr_exception_ls2)) & ((lsu_valid_ls2 & lsu_store_ls2) | biu_wr_req_q);
    //assign biu_wr_req_in = (~(biu_lsu_wr_ack_ls2 | tlbr_exception_ls2 | pis_exception_ls2 | ppi_exception_ls2 | pme_exception_ls2)) & ((lsu_valid_ls2 & lsu_store_ls2) | biu_wr_req_q);
-   assign biu_wr_req_in = (~(biu_lsu_wr_ack_ls2 | tlbr_exception_ls2 | pis_exception_ls2 | ppi_exception_ls2 | pme_exception_ls2)) & ((lsu_valid_ls2_dly1 & lsu_store_ls2) | biu_wr_req_q);
+   assign biu_wr_req_in = (~(biu_lsu_wr_ack_ls2 | tlbr_exception_ls2_dly1 | pis_exception_ls2_dly1 | ppi_exception_ls2_dly1 | pme_exception_ls2_dly1)) & ((lsu_valid_ls2_dly1 & lsu_store_ls2) | biu_wr_req_q);
 
    dffrl_ns #(1) biu_wr_req_reg (
       .din   (biu_wr_req_in),
@@ -828,10 +828,10 @@ module c7blsu(
 
 
    dffrl_ns #(1) tlb_res_vld_reg (
-      .din (tlb_s_vld),
+      .din (tlb_s_vld_ls2),
       .clk (clk),
       .rst_l (resetn),
-      .q   (tlb_res_vld_ls2));
+      .q   (tlb_res_vld_ls2_dly1));
 
 
    assign lsu_sc = lsu_scw_q;
@@ -843,19 +843,19 @@ module c7blsu(
    // Unimplmented signals
    assign lsu_ecl_except_ecc_ls3 = 1'b0;
 
-   assign lsu_ecl_except_tlbr_ls2 = tlbr_exception_ls2;
+   assign lsu_ecl_except_tlbr_ls2 = tlbr_exception_ls2_dly1;
    assign lsu_ecl_except_tlbr_badv_ls2 = lsu_addr_ls2;
 
-   assign lsu_except_pil_ls2 = pil_exception_ls2;
+   assign lsu_except_pil_ls2 = pil_exception_ls2_dly1;
    assign lsu_except_pil_badv_ls2 = lsu_addr_ls2;
 
-   assign lsu_except_pis_ls2 = pis_exception_ls2;
+   assign lsu_except_pis_ls2 = pis_exception_ls2_dly1;
    assign lsu_except_pis_badv_ls2 = lsu_addr_ls2;
 
-   assign lsu_except_ppi_ls2 = ppi_exception_ls2;
+   assign lsu_except_ppi_ls2 = ppi_exception_ls2_dly1;
    assign lsu_except_ppi_badv_ls2 = lsu_addr_ls2;
 
-   assign lsu_except_pme_ls2 = pme_exception_ls2;
+   assign lsu_except_pme_ls2 = pme_exception_ls2_dly1;
    assign lsu_except_pme_badv_ls2 = lsu_addr_ls2;
 
 endmodule
