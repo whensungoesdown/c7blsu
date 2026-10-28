@@ -388,7 +388,7 @@ The CSR bit `TLBIDX.I_D` (bit 16, `c7bcsr.v:627`) selects the target TLB:
 | TLBSRCH | `s_vld = tlb_s_vld \| exu_dtlb_tlbsrch_vld_e`; while `tlbsrch_vld_e` is high the key is `CSR.TLBEHI.VPPN` and `CSR.ASID` (`c7blsu.v:411-416`). Result is read one cycle later: `dtlb_csr_tlbidx_e = tlbsrch_vld_m ? s_found : r_e`, `dtlb_csr_tlbidx_index = s_index` (`c7blsu.v:396-399`). The ECL stalls the IFU during the TLB op's E cycle so TLBSRCH owns the search port (`c7bexu.v:996`, `c7bexu_ecl.v:115`). A TLBSRCH does not set `tlb_res_vld_ls2`, so it raises no LSU exception. |
 | TLBWR / TLBFILL | `we = (tlbfill_vld_e \| tlbwr_vld_e) & I_D`; index = `TLBIDX.INDEX` (TLBWR) or `exu_dtlb_random_index` (TLBFILL); `w_e = tlbrefill_ctx ? 1 : ~TLBIDX.NE`; `w_g = TLBELO0.G & TLBELO1.G` (`c7blsu.v:389-394, 426-442`). |
 | TLBRD | Read port indexed by `TLBIDX.INDEX`, outputs go to CSR (`dtlb_csr_*`). |
-| INVTLB | `inv_en = invtlb_vld_e & I_D`; op = `rd`, asid = `rs1[9:0]`, vppn = `rs2[31:13]` (`c7bexu.v:907-910`). Ops 0-6 clear `E` per op; other ops do nothing. INVTLB has priority over a write in the same cycle (`c7btlb.v:159-225`). |
+| INVTLB | `inv_en = invtlb_vld_e`, independent of `I_D` (the ITLB is invalidated by the same INVTLB); op = `rd`, asid = `rs1[9:0]`, vppn = `rs2[31:13]` (`c7bexu.v:907-910`). Ops 0-6 clear `E` per op; other ops do nothing. INVTLB has priority over a write in the same cycle (`c7btlb.v:159-225`). |
 
 ## Notes / limitations
 
