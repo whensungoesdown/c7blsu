@@ -6,10 +6,12 @@
 // is always ready to accept the request for this in-order core.
 //
 
-// The ecl_lsu_valid_e signal propagates through the pipeline stages as
-// lsu_valid_ls1 and lsu_valid_ls2. At LS2, lsu_valid_ls2 triggers a BIU
-// request (lsu_biu_rd_req_ls2 / lsu_biu_wr_req_ls2), which remains asserted
-// until acknowleged by the BIU.
+// The ecl_lsu_valid_e signal is registered through the pipeline stages as
+// lsu_valid_ls1 and lsu_valid_ls2. The DTLB is searched in LS1 and returns
+// its result in LS2, where lsu_valid_ls2 triggers a BIU request
+// (lsu_biu_rd_req_ls2 / lsu_biu_wr_req_ls2), which remains asserted until
+// acknowleged by the BIU. E-stage work (address, decode, ALE, LL/SC, barriers)
+// uses the _e wires. See the "registers" section for the stage summary.
 //
 // Note: Currently, both load and store requests are issued at LS2. A future
 // revision may defer loads to LS3, where they first check the Store Buffer
@@ -36,6 +38,7 @@ module c7blsu(
 
    output             lsu_ecl_wr_fin_ls3,
    // Exceptions: ale, bus error, ECC, tlb refill
+   // ALE is detected in E; the _ls1 port names are kept for the EXU
    output             lsu_ecl_except_ale_ls1,
    output [31:0]      lsu_ecl_except_ale_badv_ls1,
    output             lsu_ecl_except_buserr_ls3,
@@ -52,8 +55,9 @@ module c7blsu(
    output             lsu_except_pme_ls2,
    output [31:0]      lsu_except_pme_badv_ls2,
 
-   output             lsu_ecl_ibar_fin, 
-   output             lsu_ecl_dbar_fin, 
+   // ibar/dbar/sc finish in E (sc_fin keeps its _ls1 port name)
+   output             lsu_ecl_ibar_fin,
+   output             lsu_ecl_dbar_fin,
    output             lsu_ecl_sc_fin_ls1,
 
    output             lsu_sc,
@@ -174,149 +178,150 @@ module c7blsu(
    wire da_mode = csr_lsu_crmd_da;
    wire pg_mode = ~csr_lsu_crmd_da & csr_lsu_crmd_pg;
 
-   //wire match_dmw0_ls1; 
-   //wire match_dmw1_ls1; 
+   wire match_dmw0_ls1;
+   wire match_dmw1_ls1;
 
-   wire match_dmw0_ls2; 
-   wire match_dmw1_ls2; 
+   wire match_dmw0_ls2;
+   wire match_dmw1_ls2;
 
+   wire               lsu_valid_e;
    wire               lsu_valid_ls1;
    wire               lsu_valid_ls2;
-   wire               lsu_valid_ls2_dly1;
-   wire [6:0]         lsu_op_ls1;
-   wire [31:0]        lsu_base_ls1;
-   wire [31:0]        lsu_offset_ls1;
-   wire [31:0]        lsu_wdata_raw_ls1;
+   wire [6:0]         lsu_op_e;
+   wire [31:0]        lsu_wdata_e;
    wire [31:0]        lsu_wdata_ls1;
    wire [31:0]        lsu_wdata_ls2;
+   wire [3:0]         lsu_wstrb_e;
    wire [3:0]         lsu_wstrb_ls1;
    wire [3:0]         lsu_wstrb_ls2;
-   wire [4:0]         lsu_rd_ls1;
-   wire               lsu_wen_ls1;
 
-   wire [31:0]        lsu_addr_ls1   = lsu_base_ls1 + lsu_offset_ls1;
-   wire [ 2:0]        lsu_shift_ls1  = lsu_addr_ls1[2:0];
+   wire [31:0]        lsu_addr_e   = ecl_lsu_base_e + ecl_lsu_offset_e;
+   wire [ 2:0]        lsu_shift_e  = lsu_addr_e[2:0];
+   wire [ 2:0]        lsu_shift_ls1;
    wire [ 2:0]        lsu_shift_ls2;
    wire [ 2:0]        lsu_shift_ls3;
 
+   wire [31:0]        lsu_addr_ls1;
    wire [31:0]        lsu_addr_ls2;
    wire [31:0]        lsu_addr_ls3;
 
    wire [31:0]        lsu_paddr_ls2;
 
 
-   wire lsu_dbar_ls1 = ecl_lsu_dbar_e;
-   wire lsu_ibar_ls1 = ecl_lsu_ibar_e;
+   wire lsu_dbar_e = ecl_lsu_dbar_e;
+   wire lsu_ibar_e = ecl_lsu_ibar_e;
 
    wire lsu_scw_q; // record whether this is a scw instrution for later use
 
    // decode atomic op
-   wire lsu_am_lw   = lsu_op_ls1 == `LLSU_AMSWAP_W    || lsu_op_ls1 == `LLSU_AMADD_W     ||
-	              lsu_op_ls1 == `LLSU_AMAND_W     || lsu_op_ls1 == `LLSU_AMOR_W      ||
-	              lsu_op_ls1 == `LLSU_AMXOR_W     || lsu_op_ls1 == `LLSU_AMMAX_W     ||
-	              lsu_op_ls1 == `LLSU_AMMIN_W     || lsu_op_ls1 == `LLSU_AMMAX_WU    ||
-	              lsu_op_ls1 == `LLSU_AMMIN_WU    || lsu_op_ls1 == `LLSU_AMSWAP_DB_W ||
-	              lsu_op_ls1 == `LLSU_AMADD_DB_W  || lsu_op_ls1 == `LLSU_AMAND_DB_W  ||
-	              lsu_op_ls1 == `LLSU_AMOR_DB_W   || lsu_op_ls1 == `LLSU_AMXOR_DB_W  ||
-	              lsu_op_ls1 == `LLSU_AMMAX_DB_W  || lsu_op_ls1 == `LLSU_AMMIN_DB_W  ||
-	              lsu_op_ls1 == `LLSU_AMMAX_DB_WU || lsu_op_ls1 == `LLSU_AMMIN_DB_WU ;
+   wire lsu_am_lw   = lsu_op_e == `LLSU_AMSWAP_W    || lsu_op_e == `LLSU_AMADD_W     ||
+	              lsu_op_e == `LLSU_AMAND_W     || lsu_op_e == `LLSU_AMOR_W      ||
+	              lsu_op_e == `LLSU_AMXOR_W     || lsu_op_e == `LLSU_AMMAX_W     ||
+	              lsu_op_e == `LLSU_AMMIN_W     || lsu_op_e == `LLSU_AMMAX_WU    ||
+	              lsu_op_e == `LLSU_AMMIN_WU    || lsu_op_e == `LLSU_AMSWAP_DB_W ||
+	              lsu_op_e == `LLSU_AMADD_DB_W  || lsu_op_e == `LLSU_AMAND_DB_W  ||
+	              lsu_op_e == `LLSU_AMOR_DB_W   || lsu_op_e == `LLSU_AMXOR_DB_W  ||
+	              lsu_op_e == `LLSU_AMMAX_DB_W  || lsu_op_e == `LLSU_AMMIN_DB_W  ||
+	              lsu_op_e == `LLSU_AMMAX_DB_WU || lsu_op_e == `LLSU_AMMIN_DB_WU ;
 
-   wire lsu_am_ld   = lsu_op_ls1 == `LLSU_AMSWAP_D    || lsu_op_ls1 == `LLSU_AMADD_D     ||
-	              lsu_op_ls1 == `LLSU_AMAND_D     || lsu_op_ls1 == `LLSU_AMOR_D      ||
-	              lsu_op_ls1 == `LLSU_AMXOR_D     || lsu_op_ls1 == `LLSU_AMMAX_D     ||
-	              lsu_op_ls1 == `LLSU_AMMIN_D     || lsu_op_ls1 == `LLSU_AMMAX_DU    ||
-	              lsu_op_ls1 == `LLSU_AMMIN_DU    || lsu_op_ls1 == `LLSU_AMSWAP_DB_D ||
-	              lsu_op_ls1 == `LLSU_AMADD_DB_D  || lsu_op_ls1 == `LLSU_AMAND_DB_D  ||
-	              lsu_op_ls1 == `LLSU_AMOR_DB_D   || lsu_op_ls1 == `LLSU_AMXOR_DB_D  ||
-	              lsu_op_ls1 == `LLSU_AMMAX_DB_D  || lsu_op_ls1 == `LLSU_AMMIN_DB_D  ||
-	              lsu_op_ls1 == `LLSU_AMMAX_DB_DU || lsu_op_ls1 == `LLSU_AMMIN_DB_DU ;
+   wire lsu_am_ld   = lsu_op_e == `LLSU_AMSWAP_D    || lsu_op_e == `LLSU_AMADD_D     ||
+	              lsu_op_e == `LLSU_AMAND_D     || lsu_op_e == `LLSU_AMOR_D      ||
+	              lsu_op_e == `LLSU_AMXOR_D     || lsu_op_e == `LLSU_AMMAX_D     ||
+	              lsu_op_e == `LLSU_AMMIN_D     || lsu_op_e == `LLSU_AMMAX_DU    ||
+	              lsu_op_e == `LLSU_AMMIN_DU    || lsu_op_e == `LLSU_AMSWAP_DB_D ||
+	              lsu_op_e == `LLSU_AMADD_DB_D  || lsu_op_e == `LLSU_AMAND_DB_D  ||
+	              lsu_op_e == `LLSU_AMOR_DB_D   || lsu_op_e == `LLSU_AMXOR_DB_D  ||
+	              lsu_op_e == `LLSU_AMMAX_DB_D  || lsu_op_e == `LLSU_AMMIN_DB_D  ||
+	              lsu_op_e == `LLSU_AMMAX_DB_DU || lsu_op_e == `LLSU_AMMIN_DB_DU ;
 
-   wire lsu_am_sw   = lsu_op_ls1 == `LLSU_AMSWAP_W    || lsu_op_ls1 == `LLSU_AMADD_W     ||
-	              lsu_op_ls1 == `LLSU_AMAND_W     || lsu_op_ls1 == `LLSU_AMOR_W      ||
-	              lsu_op_ls1 == `LLSU_AMXOR_W     || lsu_op_ls1 == `LLSU_AMMAX_W     ||
-	              lsu_op_ls1 == `LLSU_AMMIN_W     || lsu_op_ls1 == `LLSU_AMMAX_WU    ||
-	              lsu_op_ls1 == `LLSU_AMMIN_WU    || lsu_op_ls1 == `LLSU_AMSWAP_DB_W ||
-	              lsu_op_ls1 == `LLSU_AMADD_DB_W  || lsu_op_ls1 == `LLSU_AMAND_DB_W  ||
-	              lsu_op_ls1 == `LLSU_AMOR_DB_W   || lsu_op_ls1 == `LLSU_AMXOR_DB_W  ||
-	              lsu_op_ls1 == `LLSU_AMMAX_DB_W  || lsu_op_ls1 == `LLSU_AMMIN_DB_W  ||
-	              lsu_op_ls1 == `LLSU_AMMAX_DB_WU || lsu_op_ls1 == `LLSU_AMMIN_DB_WU ;
+   wire lsu_am_sw   = lsu_op_e == `LLSU_AMSWAP_W    || lsu_op_e == `LLSU_AMADD_W     ||
+	              lsu_op_e == `LLSU_AMAND_W     || lsu_op_e == `LLSU_AMOR_W      ||
+	              lsu_op_e == `LLSU_AMXOR_W     || lsu_op_e == `LLSU_AMMAX_W     ||
+	              lsu_op_e == `LLSU_AMMIN_W     || lsu_op_e == `LLSU_AMMAX_WU    ||
+	              lsu_op_e == `LLSU_AMMIN_WU    || lsu_op_e == `LLSU_AMSWAP_DB_W ||
+	              lsu_op_e == `LLSU_AMADD_DB_W  || lsu_op_e == `LLSU_AMAND_DB_W  ||
+	              lsu_op_e == `LLSU_AMOR_DB_W   || lsu_op_e == `LLSU_AMXOR_DB_W  ||
+	              lsu_op_e == `LLSU_AMMAX_DB_W  || lsu_op_e == `LLSU_AMMIN_DB_W  ||
+	              lsu_op_e == `LLSU_AMMAX_DB_WU || lsu_op_e == `LLSU_AMMIN_DB_WU ;
 
-   wire lsu_am_sd   = lsu_op_ls1 == `LLSU_AMSWAP_D    || lsu_op_ls1 == `LLSU_AMADD_D     ||
-	              lsu_op_ls1 == `LLSU_AMAND_D     || lsu_op_ls1 == `LLSU_AMOR_D      ||
-	              lsu_op_ls1 == `LLSU_AMXOR_D     || lsu_op_ls1 == `LLSU_AMMAX_D     ||
-	              lsu_op_ls1 == `LLSU_AMMIN_D     || lsu_op_ls1 == `LLSU_AMMAX_DU    ||
-	              lsu_op_ls1 == `LLSU_AMMIN_DU    || lsu_op_ls1 == `LLSU_AMSWAP_DB_D ||
-	              lsu_op_ls1 == `LLSU_AMADD_DB_D  || lsu_op_ls1 == `LLSU_AMAND_DB_D  ||
-	              lsu_op_ls1 == `LLSU_AMOR_DB_D   || lsu_op_ls1 == `LLSU_AMXOR_DB_D  ||
-	              lsu_op_ls1 == `LLSU_AMMAX_DB_D  || lsu_op_ls1 == `LLSU_AMMIN_DB_D  ||
-	              lsu_op_ls1 == `LLSU_AMMAX_DB_DU || lsu_op_ls1 == `LLSU_AMMIN_DB_DU ;
+   wire lsu_am_sd   = lsu_op_e == `LLSU_AMSWAP_D    || lsu_op_e == `LLSU_AMADD_D     ||
+	              lsu_op_e == `LLSU_AMAND_D     || lsu_op_e == `LLSU_AMOR_D      ||
+	              lsu_op_e == `LLSU_AMXOR_D     || lsu_op_e == `LLSU_AMMAX_D     ||
+	              lsu_op_e == `LLSU_AMMIN_D     || lsu_op_e == `LLSU_AMMAX_DU    ||
+	              lsu_op_e == `LLSU_AMMIN_DU    || lsu_op_e == `LLSU_AMSWAP_DB_D ||
+	              lsu_op_e == `LLSU_AMADD_DB_D  || lsu_op_e == `LLSU_AMAND_DB_D  ||
+	              lsu_op_e == `LLSU_AMOR_DB_D   || lsu_op_e == `LLSU_AMXOR_DB_D  ||
+	              lsu_op_e == `LLSU_AMMAX_DB_D  || lsu_op_e == `LLSU_AMMIN_DB_D  ||
+	              lsu_op_e == `LLSU_AMMAX_DB_DU || lsu_op_e == `LLSU_AMMIN_DB_DU ;
 
-   wire lsu_llw     = lsu_op_ls1 == `LLSU_LL_W;
-   wire lsu_lld     = lsu_op_ls1 == `LLSU_LL_D;
-   wire lsu_scw     = lsu_op_ls1 == `LLSU_SC_W;
-   wire lsu_scd     = lsu_op_ls1 == `LLSU_SC_D;
+   wire lsu_llw     = lsu_op_e == `LLSU_LL_W;
+   wire lsu_lld     = lsu_op_e == `LLSU_LL_D;
+   wire lsu_scw     = lsu_op_e == `LLSU_SC_W;
+   wire lsu_scd     = lsu_op_e == `LLSU_SC_D;
 
-   wire lsu_lw      = lsu_op_ls1 == `LLSU_LD_W  || lsu_op_ls1 == `LLSU_LDX_W  || lsu_op_ls1 == `LLSU_LDGT_W || lsu_op_ls1 == `LLSU_LDLE_W || lsu_op_ls1 == `LLSU_IOCSRRD_W;
-   wire lsu_lwu     = lsu_op_ls1 == `LLSU_LD_WU || lsu_op_ls1 == `LLSU_LDX_WU ;
-   wire lsu_sw      = lsu_op_ls1 == `LLSU_ST_W  || lsu_op_ls1 == `LLSU_STX_W  || lsu_op_ls1 == `LLSU_STGT_W || lsu_op_ls1 == `LLSU_STLE_W || lsu_op_ls1 == `LLSU_IOCSRWR_W ||
+   wire lsu_lw      = lsu_op_e == `LLSU_LD_W  || lsu_op_e == `LLSU_LDX_W  || lsu_op_e == `LLSU_LDGT_W || lsu_op_e == `LLSU_LDLE_W || lsu_op_e == `LLSU_IOCSRRD_W;
+   wire lsu_lwu     = lsu_op_e == `LLSU_LD_WU || lsu_op_e == `LLSU_LDX_WU ;
+   wire lsu_sw      = lsu_op_e == `LLSU_ST_W  || lsu_op_e == `LLSU_STX_W  || lsu_op_e == `LLSU_STGT_W || lsu_op_e == `LLSU_STLE_W || lsu_op_e == `LLSU_IOCSRWR_W ||
                       lsu_am_sw;
-   wire lsu_lb      = lsu_op_ls1 == `LLSU_LD_B  || lsu_op_ls1 == `LLSU_LDX_B  || lsu_op_ls1 == `LLSU_LDGT_B || lsu_op_ls1 == `LLSU_LDLE_B || lsu_op_ls1 == `LLSU_IOCSRRD_B ||
-                      lsu_op_ls1 == `LLSU_PRELD || lsu_op_ls1 == `LLSU_PRELDX ;
-   wire lsu_lbu     = lsu_op_ls1 == `LLSU_LD_BU || lsu_op_ls1 == `LLSU_LDX_BU ;
-   wire lsu_lh      = lsu_op_ls1 == `LLSU_LD_H  || lsu_op_ls1 == `LLSU_LDX_H  || lsu_op_ls1 == `LLSU_LDGT_H || lsu_op_ls1 == `LLSU_LDLE_H || lsu_op_ls1 == `LLSU_IOCSRRD_H;
-   wire lsu_ld      = lsu_op_ls1 == `LLSU_LD_D  || lsu_op_ls1 == `LLSU_LDX_D  || lsu_op_ls1 == `LLSU_LDGT_D || lsu_op_ls1 == `LLSU_LDLE_D || lsu_op_ls1 == `LLSU_IOCSRRD_D;
-   wire lsu_lhu     = lsu_op_ls1 == `LLSU_LD_HU || lsu_op_ls1 == `LLSU_LDX_HU ;
-   wire lsu_sb      = lsu_op_ls1 == `LLSU_ST_B  || lsu_op_ls1 == `LLSU_STX_B  || lsu_op_ls1 == `LLSU_STGT_B || lsu_op_ls1 == `LLSU_STLE_B || lsu_op_ls1 == `LLSU_IOCSRWR_B;
-   wire lsu_sh      = lsu_op_ls1 == `LLSU_ST_H  || lsu_op_ls1 == `LLSU_STX_H  || lsu_op_ls1 == `LLSU_STGT_H || lsu_op_ls1 == `LLSU_STLE_H || lsu_op_ls1 == `LLSU_IOCSRWR_H;
-   wire lsu_sd      = lsu_op_ls1 == `LLSU_ST_D  || lsu_op_ls1 == `LLSU_STX_D  || lsu_op_ls1 == `LLSU_STGT_D || lsu_op_ls1 == `LLSU_STLE_D || lsu_op_ls1 == `LLSU_IOCSRWR_D ||
+   wire lsu_lb      = lsu_op_e == `LLSU_LD_B  || lsu_op_e == `LLSU_LDX_B  || lsu_op_e == `LLSU_LDGT_B || lsu_op_e == `LLSU_LDLE_B || lsu_op_e == `LLSU_IOCSRRD_B ||
+                      lsu_op_e == `LLSU_PRELD || lsu_op_e == `LLSU_PRELDX ;
+   wire lsu_lbu     = lsu_op_e == `LLSU_LD_BU || lsu_op_e == `LLSU_LDX_BU ;
+   wire lsu_lh      = lsu_op_e == `LLSU_LD_H  || lsu_op_e == `LLSU_LDX_H  || lsu_op_e == `LLSU_LDGT_H || lsu_op_e == `LLSU_LDLE_H || lsu_op_e == `LLSU_IOCSRRD_H;
+   wire lsu_ld      = lsu_op_e == `LLSU_LD_D  || lsu_op_e == `LLSU_LDX_D  || lsu_op_e == `LLSU_LDGT_D || lsu_op_e == `LLSU_LDLE_D || lsu_op_e == `LLSU_IOCSRRD_D;
+   wire lsu_lhu     = lsu_op_e == `LLSU_LD_HU || lsu_op_e == `LLSU_LDX_HU ;
+   wire lsu_sb      = lsu_op_e == `LLSU_ST_B  || lsu_op_e == `LLSU_STX_B  || lsu_op_e == `LLSU_STGT_B || lsu_op_e == `LLSU_STLE_B || lsu_op_e == `LLSU_IOCSRWR_B;
+   wire lsu_sh      = lsu_op_e == `LLSU_ST_H  || lsu_op_e == `LLSU_STX_H  || lsu_op_e == `LLSU_STGT_H || lsu_op_e == `LLSU_STLE_H || lsu_op_e == `LLSU_IOCSRWR_H;
+   wire lsu_sd      = lsu_op_e == `LLSU_ST_D  || lsu_op_e == `LLSU_STX_D  || lsu_op_e == `LLSU_STGT_D || lsu_op_e == `LLSU_STLE_D || lsu_op_e == `LLSU_IOCSRWR_D ||
                       lsu_am_sd;   
 
 
-//   wire lsu_gt      = lsu_op_ls1 == `LLSU_LDGT_W || lsu_op_ls1 == `LLSU_LDGT_B || lsu_op_ls1 == `LLSU_LDGT_H || lsu_op_ls1 == `LLSU_LDGT_D ||
-//                      lsu_op_ls1 == `LLSU_STGT_W || lsu_op_ls1 == `LLSU_STGT_B || lsu_op_ls1 == `LLSU_STGT_H || lsu_op_ls1 == `LLSU_STGT_D ;
-//   wire lsu_le      = lsu_op_ls1 == `LLSU_LDLE_W || lsu_op_ls1 == `LLSU_LDLE_B || lsu_op_ls1 == `LLSU_LDLE_H || lsu_op_ls1 == `LLSU_LDLE_D ||
-//                      lsu_op_ls1 == `LLSU_STLE_W || lsu_op_ls1 == `LLSU_STLE_B || lsu_op_ls1 == `LLSU_STLE_H || lsu_op_ls1 == `LLSU_STLE_D ;
-//   wire lsu_idle    = lsu_op_ls1 == `LLSU_IDLE;
+//   wire lsu_gt      = lsu_op_e == `LLSU_LDGT_W || lsu_op_e == `LLSU_LDGT_B || lsu_op_e == `LLSU_LDGT_H || lsu_op_e == `LLSU_LDGT_D ||
+//                      lsu_op_e == `LLSU_STGT_W || lsu_op_e == `LLSU_STGT_B || lsu_op_e == `LLSU_STGT_H || lsu_op_e == `LLSU_STGT_D ;
+//   wire lsu_le      = lsu_op_e == `LLSU_LDLE_W || lsu_op_e == `LLSU_LDLE_B || lsu_op_e == `LLSU_LDLE_H || lsu_op_e == `LLSU_LDLE_D ||
+//                      lsu_op_e == `LLSU_STLE_W || lsu_op_e == `LLSU_STLE_B || lsu_op_e == `LLSU_STLE_H || lsu_op_e == `LLSU_STLE_D ;
+//   wire lsu_idle    = lsu_op_e == `LLSU_IDLE;
 //
-//   wire prefetch    = lsu_op_ls1 == `LLSU_PRELD || lsu_op_ls1 == `LLSU_PRELDX;
+//   wire prefetch    = lsu_op_e == `LLSU_PRELD || lsu_op_e == `LLSU_PRELDX;
 
 
    //wire lsu_wr      = lsu_sw || lsu_sb || lsu_sh || lsu_scw || lsu_scd || lsu_sd;
-   wire lsu_load_ls1  = lsu_ld || lsu_lw || lsu_llw || lsu_lld || lsu_lb  || lsu_lbu || lsu_lh || lsu_lhu || lsu_lbu || lsu_lwu;
-   //wire lsu_store_ls1 = lsu_sb || lsu_sh || lsu_sd  || lsu_sw  || lsu_scw || lsu_scd;
+   wire lsu_load_e  = lsu_ld || lsu_lw || lsu_llw || lsu_lld || lsu_lb  || lsu_lbu || lsu_lh || lsu_lhu || lsu_lbu || lsu_lwu;
+   //wire lsu_store_e = lsu_sb || lsu_sh || lsu_sd  || lsu_sw  || lsu_scw || lsu_scd;
    // If no llb set, sc do not perform store
-   wire lsu_store_ls1 = lsu_sb || lsu_sh || lsu_sd  || lsu_sw  || (lsu_scw && csr_lsu_llb) || (lsu_scd && csr_lsu_llb); 
+   wire lsu_store_e = lsu_sb || lsu_sh || lsu_sd  || lsu_sw  || (lsu_scw && csr_lsu_llb) || (lsu_scd && csr_lsu_llb); 
 
+   wire lsu_load_ls1;
+   wire lsu_store_ls1;
    wire lsu_load_ls2;
    wire lsu_store_ls2;
 
 
-   assign lsu_wstrb_ls1    = {4{lsu_sw||lsu_scw}} & (4'b1111              ) |
-                             {4{lsu_sh         }} & (4'b0011 << lsu_shift_ls1[1:0]) |
-                             {4{lsu_sb         }} & (4'b0001 << lsu_shift_ls1[1:0]) ;
+   assign lsu_wstrb_e    = {4{lsu_sw||lsu_scw}} & (4'b1111              ) |
+                             {4{lsu_sh         }} & (4'b0011 << lsu_shift_e[1:0]) |
+                             {4{lsu_sb         }} & (4'b0001 << lsu_shift_e[1:0]) ;
 
-   assign lsu_wdata_ls1   = {32{lsu_sw||lsu_scw}} & {lsu_wdata_raw_ls1[31:0]} |
-                            {32{lsu_sh         }} & {lsu_wdata_raw_ls1[15:0], lsu_wdata_raw_ls1[15:0]} |
-                            {32{lsu_sb         }} & {lsu_wdata_raw_ls1[ 7:0], lsu_wdata_raw_ls1[7:0], lsu_wdata_raw_ls1[7:0], lsu_wdata_raw_ls1[7:0]};
+   assign lsu_wdata_e   = {32{lsu_sw||lsu_scw}} & {ecl_lsu_wdata_e[31:0]} |
+                            {32{lsu_sh         }} & {ecl_lsu_wdata_e[15:0], ecl_lsu_wdata_e[15:0]} |
+                            {32{lsu_sb         }} & {ecl_lsu_wdata_e[ 7:0], ecl_lsu_wdata_e[7:0], ecl_lsu_wdata_e[7:0], ecl_lsu_wdata_e[7:0]};
 
 
 
    // address alignment exception, trigger pipeline abort
-   wire am_addr_align_exc = (lsu_am_lw || lsu_am_sw || lsu_llw || lsu_scw) && lsu_addr_ls1[1:0] != 2'd0 ||
-	                    (lsu_am_ld || lsu_am_sd || lsu_lld || lsu_scd) && lsu_addr_ls1[2:0] != 3'd0 ;
+   wire am_addr_align_exc = (lsu_am_lw || lsu_am_sw || lsu_llw || lsu_scw) && lsu_addr_e[1:0] != 2'd0 ||
+	                    (lsu_am_ld || lsu_am_sd || lsu_lld || lsu_scd) && lsu_addr_e[2:0] != 3'd0 ;
 
-   wire cm_addr_align_exc = (lsu_ld||lsu_sd         ) && lsu_addr_ls1[2:0] != 3'd0 ||
-                            (lsu_lw||lsu_lwu||lsu_sw) && lsu_addr_ls1[1:0] != 2'd0 ||
-                            (lsu_lh||lsu_lhu||lsu_sh) && lsu_addr_ls1[0]   != 1'd0 ;
+   wire cm_addr_align_exc = (lsu_ld||lsu_sd         ) && lsu_addr_e[2:0] != 3'd0 ||
+                            (lsu_lw||lsu_lwu||lsu_sw) && lsu_addr_e[1:0] != 2'd0 ||
+                            (lsu_lh||lsu_lhu||lsu_sh) && lsu_addr_e[0]   != 1'd0 ;
 
-   wire lsu_ale_ls1               = am_addr_align_exc || cm_addr_align_exc;
+   wire lsu_ale_e               = am_addr_align_exc || cm_addr_align_exc;
 
-   assign lsu_ecl_except_ale_ls1  = lsu_ale_ls1 & lsu_valid_ls1;
-   assign lsu_ecl_except_ale_badv_ls1 = lsu_addr_ls1;
+   assign lsu_ecl_except_ale_ls1  = lsu_ale_e & lsu_valid_e;
+   assign lsu_ecl_except_ale_badv_ls1 = lsu_addr_e;
 
 
-   assign lsu_ecl_ibar_fin = lsu_ibar_ls1 & lsu_valid_ls1;
-   assign lsu_ecl_dbar_fin = lsu_dbar_ls1 & lsu_valid_ls1;
+   assign lsu_ecl_ibar_fin = lsu_ibar_e & lsu_valid_e;
+   assign lsu_ecl_dbar_fin = lsu_dbar_e & lsu_valid_e;
 
 
 
@@ -325,7 +330,7 @@ module c7blsu(
    //
 
    // ---------- TLB search port signals ----------
-   wire        tlb_s_vld_ls2;
+   wire        tlb_s_vld_ls1;
    wire [18:0] tlb_s_vppn;     // VPN2 (19 bits)
    wire        tlb_s_odd_page;
    wire [ 9:0] tlb_s_asid;
@@ -337,33 +342,30 @@ module c7blsu(
    wire [ 1:0] tlb_s_mat;
    wire [ 1:0] tlb_s_plv;
 
-   wire tlb_res_vld_ls2_dly1;
-   wire tlbr_exception_ls2_dly1;
-   wire pil_exception_ls2_dly1;
-   wire pis_exception_ls2_dly1;
-   wire ppi_exception_ls2_dly1;
-   wire pme_exception_ls2_dly1;
+   wire tlb_res_vld_ls2;
+   wire tlbr_exception_ls2;
+   wire pil_exception_ls2;
+   wire pis_exception_ls2;
+   wire ppi_exception_ls2;
+   wire pme_exception_ls2;
 
    //wire tlb_related_exceptions;
    //assign tlb_related_exceptions = tlbr_exception_ls2 | pil_exception_ls2 | pis_exception_ls2 | pme_exception_ls2;
 
-   assign tlbr_exception_ls2_dly1 = tlb_res_vld_ls2_dly1 & ~tlb_s_found; // uty: test
+   assign tlbr_exception_ls2 = tlb_res_vld_ls2 & ~tlb_s_found; // uty: test
 
-   assign pil_exception_ls2_dly1 = tlb_res_vld_ls2_dly1 & tlb_s_found & ~tlb_s_v & lsu_load_ls2;
-   assign pis_exception_ls2_dly1 = tlb_res_vld_ls2_dly1 & tlb_s_found & ~tlb_s_v & lsu_store_ls2;
-   assign ppi_exception_ls2_dly1 = tlb_res_vld_ls2_dly1 & tlb_s_found & tlb_s_v & (csr_dtlb_crmd_plv > tlb_s_plv);
-   assign pme_exception_ls2_dly1 = tlb_res_vld_ls2_dly1 & tlb_s_found & tlb_s_v & ~tlb_s_d & lsu_store_ls2;
+   assign pil_exception_ls2 = tlb_res_vld_ls2 & tlb_s_found & ~tlb_s_v & lsu_load_ls2;
+   assign pis_exception_ls2 = tlb_res_vld_ls2 & tlb_s_found & ~tlb_s_v & lsu_store_ls2;
+   assign ppi_exception_ls2 = tlb_res_vld_ls2 & tlb_s_found & tlb_s_v & (csr_dtlb_crmd_plv > tlb_s_plv);
+   assign pme_exception_ls2 = tlb_res_vld_ls2 & tlb_s_found & tlb_s_v & ~tlb_s_d & lsu_store_ls2;
 
-   //assign tlb_s_vld = lsu_valid_ls1 & pg_mode & ~(match_dmw0_ls1 | match_dmw1_ls1);
-   // has to be load or store operations, for example, ibar and dbar do not
+   // The DTLB is searched in LS1 with the registered address; the result,
+   // the TLB exceptions and the BIU request follow in LS2.
+   // Has to be load or store operations, for example, ibar and dbar do not
    // need tlb address translation
-   //  uty: test
-   //assign tlb_s_vld = (lsu_valid_ls1 & (lsu_load_ls1 | lsu_store_ls1)) & pg_mode & ~(match_dmw0_ls1 | match_dmw1_ls1);
-   assign tlb_s_vld_ls2 = (lsu_valid_ls2 & (lsu_load_ls2 | lsu_store_ls2)) & pg_mode & ~(match_dmw0_ls2 | match_dmw1_ls2);
-   //assign tlb_s_vppn = lsu_addr_ls1[31:13];
-   assign tlb_s_vppn = lsu_addr_ls2[31:13];
-   //assign tlb_s_odd_page = lsu_addr_ls1[12];
-   assign tlb_s_odd_page = lsu_addr_ls2[12];
+   assign tlb_s_vld_ls1 = (lsu_valid_ls1 & (lsu_load_ls1 | lsu_store_ls1)) & pg_mode & ~(match_dmw0_ls1 | match_dmw1_ls1);
+   assign tlb_s_vppn = lsu_addr_ls1[31:13];
+   assign tlb_s_odd_page = lsu_addr_ls1[12];
    assign tlb_s_asid = csr_dtlb_asid_asid;
 
    // Physical address generation
@@ -371,9 +373,8 @@ module c7blsu(
    // - Mapped address mode (DA=0, PG=1):
    //   - If DMW0 hit, use DMW0 direct mapping
    //   - Otherwise use TLB translation result
-   //   uty: test
-   //assign match_dmw0_ls1 = (lsu_addr_ls1[31:29] == csr_lsu_dmw0_vseg);
-   //assign match_dmw1_ls1 = (lsu_addr_ls1[31:29] == csr_lsu_dmw1_vseg);
+   assign match_dmw0_ls1 = (lsu_addr_ls1[31:29] == csr_lsu_dmw0_vseg);
+   assign match_dmw1_ls1 = (lsu_addr_ls1[31:29] == csr_lsu_dmw1_vseg);
    assign match_dmw0_ls2 = (lsu_addr_ls2[31:29] == csr_lsu_dmw0_vseg);
    assign match_dmw1_ls2 = (lsu_addr_ls2[31:29] == csr_lsu_dmw1_vseg);
 
@@ -411,7 +412,7 @@ module c7blsu(
       .resetn                          (resetn),
 
       // search port
-      .s_vld                           (tlb_s_vld_ls2 | exu_dtlb_tlbsrch_vld_e),
+      .s_vld                           (tlb_s_vld_ls1 | exu_dtlb_tlbsrch_vld_e),
       //.s_vppn                          (tlb_s_vppn),
       .s_vppn                          (exu_dtlb_tlbsrch_vld_e ? csr_dtlb_tlbehi_vppn : tlb_s_vppn),
       .s_odd_page                      (tlb_s_odd_page),
@@ -525,7 +526,7 @@ module c7blsu(
    // tlb_related_exceptions contains pis and pme, which are not suppose to
    // happen during a ld
    //assign biu_rd_req_in = (~(biu_lsu_rd_ack_ls2 | tlbr_exception_ls2 | pil_exception_ls2 | ppi_exception_ls2)) & ((lsu_valid_ls2 & lsu_load_ls2) | biu_rd_req_q);
-   assign biu_rd_req_in = (~(biu_lsu_rd_ack_ls2 | tlbr_exception_ls2_dly1 | pil_exception_ls2_dly1 | ppi_exception_ls2_dly1)) & ((lsu_valid_ls2_dly1 & lsu_load_ls2) | biu_rd_req_q);
+   assign biu_rd_req_in = (~(biu_lsu_rd_ack_ls2 | tlbr_exception_ls2 | pil_exception_ls2 | ppi_exception_ls2)) & ((lsu_valid_ls2 & lsu_load_ls2) | biu_rd_req_q);
 
    dffrl_ns #(1) biu_rd_req_reg (
       .din   (biu_rd_req_in),
@@ -559,7 +560,7 @@ module c7blsu(
    //assign biu_wr_req_in = (biu_wr_req_q & ~(biu_lsu_wr_ack_ls2 | tlbr_exception_ls2)) | (lsu_valid_ls2 & lsu_store_ls2);
    //assign biu_wr_req_in = (~(biu_lsu_wr_ack_ls2 | tlbr_exception_ls2)) & ((lsu_valid_ls2 & lsu_store_ls2) | biu_wr_req_q);
    //assign biu_wr_req_in = (~(biu_lsu_wr_ack_ls2 | tlbr_exception_ls2 | pis_exception_ls2 | ppi_exception_ls2 | pme_exception_ls2)) & ((lsu_valid_ls2 & lsu_store_ls2) | biu_wr_req_q);
-   assign biu_wr_req_in = (~(biu_lsu_wr_ack_ls2 | tlbr_exception_ls2_dly1 | pis_exception_ls2_dly1 | ppi_exception_ls2_dly1 | pme_exception_ls2_dly1)) & ((lsu_valid_ls2_dly1 & lsu_store_ls2) | biu_wr_req_q);
+   assign biu_wr_req_in = (~(biu_lsu_wr_ack_ls2 | tlbr_exception_ls2 | pis_exception_ls2 | ppi_exception_ls2 | pme_exception_ls2)) & ((lsu_valid_ls2 & lsu_store_ls2) | biu_wr_req_q);
 
    dffrl_ns #(1) biu_wr_req_reg (
       .din   (biu_wr_req_in),
@@ -592,15 +593,16 @@ module c7blsu(
    wire [31:0] data_rdata_input_ls3 = data_high32_ls3 ? biu_lsu_data_ls3[63:32] : biu_lsu_data_ls3[31:0];
 
 
+   wire [4:0] lsu_align_mode_e;
    wire [4:0] lsu_align_mode_ls1;
    wire [4:0] lsu_align_mode_ls2;
    wire [4:0] lsu_align_mode_ls3;
 
-   assign lsu_align_mode_ls1[0] = !(lsu_scw || lsu_scd) && (lsu_ld ||lsu_lld);
-   assign lsu_align_mode_ls1[1] = !(lsu_scw || lsu_scd) && (lsu_lw ||lsu_llw||lsu_lwu);
-   assign lsu_align_mode_ls1[2] = !(lsu_scw || lsu_scd) && (lsu_lh ||lsu_lhu);
-   assign lsu_align_mode_ls1[3] = !(lsu_scw || lsu_scd) && (lsu_lb ||lsu_lbu);
-   assign lsu_align_mode_ls1[4] = !(lsu_scw || lsu_scd) && (lsu_lbu||lsu_lhu||lsu_lwu);
+   assign lsu_align_mode_e[0] = !(lsu_scw || lsu_scd) && (lsu_ld ||lsu_lld);
+   assign lsu_align_mode_e[1] = !(lsu_scw || lsu_scd) && (lsu_lw ||lsu_llw||lsu_lwu);
+   assign lsu_align_mode_e[2] = !(lsu_scw || lsu_scd) && (lsu_lh ||lsu_lhu);
+   assign lsu_align_mode_e[3] = !(lsu_scw || lsu_scd) && (lsu_lb ||lsu_lbu);
+   assign lsu_align_mode_e[4] = !(lsu_scw || lsu_scd) && (lsu_lbu||lsu_lhu||lsu_lwu);
 
 
    wire [31:0] lsu_align_res_ls3 = 
@@ -630,148 +632,129 @@ module c7blsu(
 
    assign lsu_ecl_wr_fin_ls3 = biu_lsu_wr_fin_ls3;
 
-   assign lsu_valid_ls1 = ecl_lsu_valid_e;
-   assign lsu_op_ls1 = ecl_lsu_op_e;
-   assign lsu_base_ls1 = ecl_lsu_base_e;
-   assign lsu_offset_ls1 = ecl_lsu_offset_e;
-   assign lsu_wdata_raw_ls1 = ecl_lsu_wdata_e;
+   assign lsu_valid_e = ecl_lsu_valid_e;
+   assign lsu_op_e = ecl_lsu_op_e;
 
 
    // ll.w sc.w
-   assign lsu_csr_llb_set = lsu_llw & lsu_valid_ls1;
-   assign lsu_csr_llb_clr = lsu_scw & lsu_valid_ls1 & csr_lsu_llb;
-   assign lsu_ecl_sc_fin_ls1 = lsu_scw & lsu_valid_ls1 & ~csr_lsu_llb;
+   assign lsu_csr_llb_set = lsu_llw & lsu_valid_e;
+   assign lsu_csr_llb_clr = lsu_scw & lsu_valid_e & csr_lsu_llb;
+   assign lsu_ecl_sc_fin_ls1 = lsu_scw & lsu_valid_e & ~csr_lsu_llb;
 
 
    //
    // registers
    //
 
-   // The signal lsu_valid_ls1 initiates load/store execution within the LSU.
-   // The ECL interface signals are pulsed for a single cycle by ECL and must
-   // be captured internally by the LSU to maitain the request state. The LSU
-   // is always ready to accept the request for this in-order core.
+   // Stages (one request at a time, the core stalls until the LSU ends it):
    //
-   // The signal lsu_valid_ls1 is cleared and refreshed after a request is
-   // served (by BIU, STB, or DCACHE) or aborted (e.g., due to an ALE in ls1).
-//   dffrl_ns #(1) lsu_valid_ls1_reg (
-//      .din (ecl_lsu_valid_e),
-//      // lsu_ecl_except_buserr_ls3 lsu_ecl_except_ecc_ls3 should also go here 
-//      //.en  (ecl_lsu_valid_e | lsu_ecl_data_valid_ls3 | lsu_ale_ls1),
-//      .clk (clk),
-//      .rst_l (resetn),
-//      .q   (lsu_valid_ls1));
-//      //.se(), .si(), .so());
+   //   E   : ecl_lsu_*_e pulse for one cycle. Address add, decode, ALE,
+   //         LLBit set/clear, sc_fin, ibar_fin, dbar_fin (all _e wires).
+   //   LS1 : E registered. DTLB search with lsu_addr_ls1.
+   //   LS2 : DTLB result, TLB exceptions, BIU request armed. The request
+   //         (lsu_biu_*_req_ls2) is registered and held until the BIU ack.
+   //   LS3 : BIU ack captures _ls2 into _ls3; read data / write finish.
+   //
+   // Every stage register is enabled by the previous stage's valid (LS3 by
+   // the BIU ack), so its value is held while the core is stalled.
 
-   // If ale occurs at ls1, it invalidates lsu_valid_ls2 and cancels
-   // subsequent lsu_biu_rd_req_ls2
+   // ALE is detected in E and the request goes no further: lsu_valid_ls1
+   // stays low, so no DTLB search and no BIU request follow.
+   dffrl_ns #(1) lsu_valid_ls1_reg (
+      .din (lsu_valid_e & ~lsu_ale_e),
+      .clk (clk),
+      .rst_l (resetn),
+      .q   (lsu_valid_ls1));
+      //.se(), .si(), .so());
+
    dffrl_ns #(1) lsu_valid_ls2_reg (
-      .din (lsu_valid_ls1 & ~lsu_ale_ls1),
+      .din (lsu_valid_ls1),
       .clk (clk),
       .rst_l (resetn),
       .q   (lsu_valid_ls2));
-      //.se(), .si(), .so());
-      //
-   dffrl_ns #(1) lsu_valid_ls2_dly1_reg (
-      .din (lsu_valid_ls2),
+
+   // LS2 holds the DTLB result for the search issued in LS1. A TLBSRCH does
+   // not set it, so it raises no LSU exception.
+   dffrl_ns #(1) tlb_res_vld_ls2_reg (
+      .din (tlb_s_vld_ls1),
       .clk (clk),
       .rst_l (resetn),
-      .q   (lsu_valid_ls2_dly1));
+      .q   (tlb_res_vld_ls2));
 
-   // lsu_valid_ls3 
-  
-
-//   dffe_ns #(7) lsu_op_ls1_reg (
-//      .din (ecl_lsu_op_e),
-//      .en  (ecl_lsu_valid_e),
-//      .clk (clk),
-//      .q   (lsu_op_ls1));
-//      //.se(), .si(), .so());
-//
-//   dffe_ns #(32) lsu_base_ls1_reg (
-//      .din (ecl_lsu_base_e),
-//      .en  (ecl_lsu_valid_e),
-//      .clk (clk),
-//      .q   (lsu_base_ls1));
-//      //.se(), .si(), .so());
-//
-//   dffe_ns #(32) lsu_offset_ls1_reg (
-//      .din (ecl_lsu_offset_e),
-//      .en  (ecl_lsu_valid_e),
-//      .clk (clk),
-//      .q   (lsu_offset_ls1));
-//      //.se(), .si(), .so());
-//
-//   dffe_ns #(32) lsu_wdata_raw_ls1_reg (
-//      .din (ecl_lsu_wdata_e),
-//      .en  (ecl_lsu_valid_e),
-//      .clk (clk),
-//      .q   (lsu_wdata_raw_ls1));
-//      //.se(), .si(), .so());
-
-   dffe_ns #(32) lsu_wdata_ls2_reg (
-      .din (lsu_wdata_ls1),
-      .clk (clk),
-      .en  (lsu_valid_ls1),
-      .q   (lsu_wdata_ls2));
-      //.se(), .si(), .so());
-
-   dffe_ns #(4) lsu_wstrb_ls2_reg (
-      .din (lsu_wstrb_ls1),
-      .clk (clk),
-      .en  (lsu_valid_ls1),
-      .q   (lsu_wstrb_ls2));
-      //.se(), .si(), .so());
-
-   // The load instruction's destination register and wen should not be
-   // managed by the LSU.
-   // There is no reservation station or other structure in the design to hold
-   // the rd field for loads.
-   // Instead, because the in-order core will stall on a load instruction, the
-   // rd information must be preserved within the EXU.
-   //dffe_s #(5) ecl_lsu_rd_ls1_reg (
-   //   .din (ecl_lsu_rd_e),
-   //   .en  (ecl_lsu_valid_e),
-   //   .clk (clk),
-   //   .q   (lsu_rd_ls1),
-   //   .se(), .si(), .so());
-
-   //dffe_s #(1) ecl_lsu_wen_ls1_reg (
-   //   .din (ecl_lsu_wen_e),
-   //   .en  (ecl_lsu_valid_e),
-   //   .clk (clk),
-   //   .q   (lsu_wen_ls1),
-   //   .se(), .si(), .so());
-
-   // The LSU pipeline begins when ecl_lsu_valid_e is asserted, and the core
-   // remains stalled until the LSU returns a result.
-   // The stage registers(_ls1, _ls2, _ls3) do not require explicit enable
-   // signals because the data flows sequentially between them. Since the core
-   // is stalled for the core is stalled for the duration of this pipeline,
-   // the register values are preserved.
-   dffe_ns #(5) lsu_align_mode_ls2_reg (
-      .din (lsu_align_mode_ls1),
-      .clk (clk),
-      .en  (lsu_valid_ls1),
-      .q   (lsu_align_mode_ls2));
-      //.se(), .si(), .so());
-
-   // The memory read request is issued in LS2 via lsu_biu_rd_req_ls2. The
-   // BIU's response time is variable, acknowledgment via biu_lsu_rd_ack_ls2
-   // may occur in the same cycle or be delayed. This acknowledgment signal
-   // initiates the subsequent pipeline stage, LS3.
    //
-   // Pipeline stages register data and control parameters, ensuring correct
-   // timing for subsequent operations. This allows the LSU to handle multiple
-   // overlapping requests, with a separate request occupying each stage (LS1,
-   // LS2, LS3) simultaneously.
-   // The current LSU pipeline is implemented for a single request at a time.
+   // E -> LS1
+   //
 
-   dffe_ns #(5) lsu_align_mode_ls3_reg (
-      .din (lsu_align_mode_ls2),
+   dffe_ns #(32) lsu_addr_ls1_reg (
+      .din (lsu_addr_e),
       .clk (clk),
-      .en  (biu_lsu_rd_ack_ls2),
-      .q   (lsu_align_mode_ls3));
+      .en  (lsu_valid_e),
+      .q   (lsu_addr_ls1));
+      //.se(), .si(), .so());
+
+   dffe_ns #(3) lsu_shift_ls1_reg (
+      .din (lsu_shift_e),
+      .clk (clk),
+      .en  (lsu_valid_e),
+      .q   (lsu_shift_ls1));
+      //.se(), .si(), .so());
+
+   dffe_ns #(1) lsu_load_ls1_reg (
+      .din (lsu_load_e),
+      .clk (clk),
+      .en  (lsu_valid_e),
+      .q   (lsu_load_ls1));
+      //.se(), .si(), .so());
+
+   dffe_ns #(1) lsu_store_ls1_reg (
+      .din (lsu_store_e),
+      .clk (clk),
+      .en  (lsu_valid_e),
+      .q   (lsu_store_ls1));
+      //.se(), .si(), .so());
+
+   dffe_ns #(32) lsu_wdata_ls1_reg (
+      .din (lsu_wdata_e),
+      .clk (clk),
+      .en  (lsu_valid_e),
+      .q   (lsu_wdata_ls1));
+      //.se(), .si(), .so());
+
+   dffe_ns #(4) lsu_wstrb_ls1_reg (
+      .din (lsu_wstrb_e),
+      .clk (clk),
+      .en  (lsu_valid_e),
+      .q   (lsu_wstrb_ls1));
+      //.se(), .si(), .so());
+
+   dffe_ns #(5) lsu_align_mode_ls1_reg (
+      .din (lsu_align_mode_e),
+      .clk (clk),
+      .en  (lsu_valid_e),
+      .q   (lsu_align_mode_ls1));
+      //.se(), .si(), .so());
+
+   // The load instruction's destination register and wen are not managed by
+   // the LSU. There is no reservation station or other structure in the
+   // design to hold the rd field for loads. Because the in-order core stalls
+   // on a load instruction, the rd information is preserved within the EXU.
+
+   dffrle_ns #(1) lsu_scw_reg (
+      .din (lsu_scw & csr_lsu_llb), // it is a scw that will store and write rd register with 32'b1
+      .clk (clk),
+      .rst_l (resetn),
+      .en (lsu_valid_e),
+      .q   (lsu_scw_q));
+
+   //
+   // LS1 -> LS2
+   //
+
+   dffe_ns #(32) lsu_addr_ls2_reg (
+      .din (lsu_addr_ls1),
+      .clk (clk),
+      .en  (lsu_valid_ls1),
+      .q   (lsu_addr_ls2));
       //.se(), .si(), .so());
 
    dffe_ns #(3) lsu_shift_ls2_reg (
@@ -779,13 +762,6 @@ module c7blsu(
       .clk (clk),
       .en  (lsu_valid_ls1),
       .q   (lsu_shift_ls2));
-      //.se(), .si(), .so());
-
-   dffe_ns #(3) lsu_shift_ls3_reg (
-      .din (lsu_shift_ls2),
-      .clk (clk),
-      .en  (biu_lsu_rd_ack_ls2),
-      .q   (lsu_shift_ls3));
       //.se(), .si(), .so());
 
    dffe_ns #(1) lsu_load_ls2_reg (
@@ -802,12 +778,35 @@ module c7blsu(
       .q   (lsu_store_ls2));
       //.se(), .si(), .so());
 
-   dffe_ns #(32) lsu_addr_ls2_reg (
-      .din (lsu_addr_ls1),
+   dffe_ns #(32) lsu_wdata_ls2_reg (
+      .din (lsu_wdata_ls1),
       .clk (clk),
       .en  (lsu_valid_ls1),
-      .q   (lsu_addr_ls2));
+      .q   (lsu_wdata_ls2));
       //.se(), .si(), .so());
+
+   dffe_ns #(4) lsu_wstrb_ls2_reg (
+      .din (lsu_wstrb_ls1),
+      .clk (clk),
+      .en  (lsu_valid_ls1),
+      .q   (lsu_wstrb_ls2));
+      //.se(), .si(), .so());
+
+   dffe_ns #(5) lsu_align_mode_ls2_reg (
+      .din (lsu_align_mode_ls1),
+      .clk (clk),
+      .en  (lsu_valid_ls1),
+      .q   (lsu_align_mode_ls2));
+      //.se(), .si(), .so());
+
+   //
+   // LS2 -> LS3
+   //
+
+   // The memory read request is issued in LS2 via lsu_biu_rd_req_ls2. The
+   // BIU's response time is variable, acknowledgment via biu_lsu_rd_ack_ls2
+   // may occur in the same cycle or be delayed. This acknowledgment signal
+   // initiates the subsequent pipeline stage, LS3.
 
    dffe_ns #(32) lsu_addr_ls3_reg (
       .din (lsu_addr_ls2),
@@ -816,25 +815,23 @@ module c7blsu(
       .q   (lsu_addr_ls3));
       //.se(), .si(), .so());
 
-   // Note: The pipeline registers _ls2 and _ls3 are functionally redundant.
-   // Because the core stalls for load/store instructions, resuling in only
-   // one request processing through the pipeline at a time. These registers
-   // therefore simply duplicate the value in _ls1. They are kept in the
-   // design for clarity and to maintain flexibility for future modifications.
-
-   dffrle_ns #(1) lsu_scw_reg (
-      .din (lsu_scw & csr_lsu_llb), // it is a scw that will store and write rd register with 32'b1
+   dffe_ns #(3) lsu_shift_ls3_reg (
+      .din (lsu_shift_ls2),
       .clk (clk),
-      .rst_l (resetn),
-      .en (lsu_valid_ls1),
-      .q   (lsu_scw_q));
+      .en  (biu_lsu_rd_ack_ls2),
+      .q   (lsu_shift_ls3));
+      //.se(), .si(), .so());
 
-
-   dffrl_ns #(1) tlb_res_vld_reg (
-      .din (tlb_s_vld_ls2),
+   dffe_ns #(5) lsu_align_mode_ls3_reg (
+      .din (lsu_align_mode_ls2),
       .clk (clk),
-      .rst_l (resetn),
-      .q   (tlb_res_vld_ls2_dly1));
+      .en  (biu_lsu_rd_ack_ls2),
+      .q   (lsu_align_mode_ls3));
+      //.se(), .si(), .so());
+
+   // Note: Because the core stalls for load/store instructions, only one
+   // request is in the pipeline at a time, so _ls2 and _ls3 duplicate _ls1.
+   // They are kept for clarity and to allow overlapping requests later.
 
 
    assign lsu_sc = lsu_scw_q;
@@ -846,19 +843,19 @@ module c7blsu(
    // Unimplmented signals
    assign lsu_ecl_except_ecc_ls3 = 1'b0;
 
-   assign lsu_ecl_except_tlbr_ls2 = tlbr_exception_ls2_dly1;
+   assign lsu_ecl_except_tlbr_ls2 = tlbr_exception_ls2;
    assign lsu_ecl_except_tlbr_badv_ls2 = lsu_addr_ls2;
 
-   assign lsu_except_pil_ls2 = pil_exception_ls2_dly1;
+   assign lsu_except_pil_ls2 = pil_exception_ls2;
    assign lsu_except_pil_badv_ls2 = lsu_addr_ls2;
 
-   assign lsu_except_pis_ls2 = pis_exception_ls2_dly1;
+   assign lsu_except_pis_ls2 = pis_exception_ls2;
    assign lsu_except_pis_badv_ls2 = lsu_addr_ls2;
 
-   assign lsu_except_ppi_ls2 = ppi_exception_ls2_dly1;
+   assign lsu_except_ppi_ls2 = ppi_exception_ls2;
    assign lsu_except_ppi_badv_ls2 = lsu_addr_ls2;
 
-   assign lsu_except_pme_ls2 = pme_exception_ls2_dly1;
+   assign lsu_except_pme_ls2 = pme_exception_ls2;
    assign lsu_except_pme_badv_ls2 = lsu_addr_ls2;
 
 endmodule
