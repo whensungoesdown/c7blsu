@@ -17,7 +17,7 @@ reg [31:0] ecl_lsu_wdata_e;
 
 wire lsu_ecl_data_valid_ls3;
 wire [31:0] lsu_ecl_data_ls3;
-wire lsu_ecl_except_ale_ls1;
+wire lsu_ecl_except_ale_e;
 wire [31:0] lsu_csr_except_badv_ls1;
 wire lsu_ecl_except_buserr_ls3;
 wire lsu_ecl_except_ecc_ls3;
@@ -53,7 +53,7 @@ c7blsu uut (
 
     .lsu_ecl_data_valid_ls3(lsu_ecl_data_valid_ls3),
     .lsu_ecl_data_ls3(lsu_ecl_data_ls3),
-    .lsu_ecl_except_ale_ls1(lsu_ecl_except_ale_ls1),
+    .lsu_ecl_except_ale_e(lsu_ecl_except_ale_e),
     .lsu_csr_except_badv_ls1(lsu_csr_except_badv_ls1),
     .lsu_ecl_except_buserr_ls3(lsu_ecl_except_buserr_ls3),
     .lsu_ecl_except_ecc_ls3(lsu_ecl_except_ecc_ls3),
@@ -177,7 +177,7 @@ always @(posedge clk) begin
     if (lsu_ecl_data_valid_ls3)
         $display("[%0t] LSU Data Valid: data=0x%h", $time, lsu_ecl_data_ls3);
 
-    if (lsu_ecl_except_ale_ls1)
+    if (lsu_ecl_except_ale_e)
         $display("[%0t] ALE Exception detected at LS1", $time);
 end
 

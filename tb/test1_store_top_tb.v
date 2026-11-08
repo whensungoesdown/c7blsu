@@ -19,7 +19,7 @@ reg [31:0] ecl_lsu_wdata_e;
 wire lsu_ecl_data_valid_ls3;
 wire [31:0] lsu_ecl_data_ls3;
 wire lsu_ecl_wr_fin_ls3;
-wire lsu_ecl_except_ale_ls1;
+wire lsu_ecl_except_ale_e;
 wire [31:0] lsu_ecl_except_badv_ls1;
 wire lsu_ecl_except_buserr_ls3;
 wire lsu_ecl_except_ecc_ls3;
@@ -40,11 +40,11 @@ wire lsu_except_pme_ls2;
 wire [31:0] lsu_except_pme_badv_ls2;
 
 // New output signals for ibar/dbar/sc and LL/SC
-wire lsu_ecl_ibar_fin;
-wire lsu_ecl_dbar_fin;
-wire lsu_ecl_sc_fin_ls1;        // SC finish at LS1
-wire lsu_csr_llb_set;           // Set LLbit from LSU (for ll.w)
-wire lsu_csr_llb_clr;           // Clear LLbit from LSU (for sc.w success)
+wire lsu_ecl_ibar_fin_e;
+wire lsu_ecl_dbar_fin_e;
+wire lsu_ecl_sc_fin_e;        // SC finish at LS1
+wire lsu_csr_llb_set_e;           // Set LLbit from LSU (for ll.w)
+wire lsu_csr_llb_clr_e;           // Clear LLbit from LSU (for sc.w success)
 
 // BIU interface
 wire lsu_biu_rd_req_ls2;
@@ -147,8 +147,8 @@ c7blsu uut (
     .lsu_ecl_data_valid_ls3(lsu_ecl_data_valid_ls3),
     .lsu_ecl_data_ls3(lsu_ecl_data_ls3),
     .lsu_ecl_wr_fin_ls3(lsu_ecl_wr_fin_ls3),
-    .lsu_ecl_except_ale_ls1(lsu_ecl_except_ale_ls1),
-    .lsu_ecl_except_ale_badv_ls1(lsu_ecl_except_badv_ls1),
+    .lsu_ecl_except_ale_e(lsu_ecl_except_ale_e),
+    .lsu_ecl_except_ale_badv_e(lsu_ecl_except_badv_ls1),
     .lsu_ecl_except_buserr_ls3(lsu_ecl_except_buserr_ls3),
     .lsu_ecl_except_ecc_ls3(lsu_ecl_except_ecc_ls3),
     .lsu_ecl_except_buserr_badv_ls3(lsu_ecl_except_buserr_badv_ls3),
@@ -165,11 +165,11 @@ c7blsu uut (
     .lsu_except_pme_ls2(lsu_except_pme_ls2),
     .lsu_except_pme_badv_ls2(lsu_except_pme_badv_ls2),
     
-    .lsu_ecl_ibar_fin(lsu_ecl_ibar_fin),
-    .lsu_ecl_dbar_fin(lsu_ecl_dbar_fin),
-    .lsu_ecl_sc_fin_ls1(lsu_ecl_sc_fin_ls1),
-    .lsu_csr_llb_set(lsu_csr_llb_set),
-    .lsu_csr_llb_clr(lsu_csr_llb_clr),
+    .lsu_ecl_ibar_fin_e(lsu_ecl_ibar_fin_e),
+    .lsu_ecl_dbar_fin_e(lsu_ecl_dbar_fin_e),
+    .lsu_ecl_sc_fin_e(lsu_ecl_sc_fin_e),
+    .lsu_csr_llb_set_e(lsu_csr_llb_set_e),
+    .lsu_csr_llb_clr_e(lsu_csr_llb_clr_e),
     .csr_lsu_llb(csr_lsu_llb),
     
     // CSR/DMW inputs (fixed)
@@ -332,7 +332,7 @@ initial begin
     $display("Testing with updated c7blsu.v interface");
     $display("biu_lsu_wr_fin_ls3 (WR_FIN) signal test included");
     $display("lsu_ecl_wr_fin_ls3 ERROR will cause test fail");
-    $display("LL/SC ports added: lsu_ecl_sc_fin_ls1, lsu_csr_llb_set, lsu_csr_llb_clr, csr_lsu_llb");
+    $display("LL/SC ports added: lsu_ecl_sc_fin_e, lsu_csr_llb_set_e, lsu_csr_llb_clr_e, csr_lsu_llb");
     $display("Missing ports connected: lsu_sc=0, csr_lsu_crmd_da=1, pg=0, dmw=0");
     $display("========================================\n");
     
@@ -1822,7 +1822,7 @@ endtask
 // Monitor outputs
 always @(posedge clk) begin
     // Monitor exception signals
-    if (lsu_ecl_except_ale_ls1) begin
+    if (lsu_ecl_except_ale_e) begin
         $display("[%0t] ALE Exception at Address: 0x%h", $time, lsu_ecl_except_badv_ls1);
         ale_exception = 1;
     end
@@ -1852,13 +1852,13 @@ always @(posedge clk) begin
     end
     
     // Optional monitor for LL/SC signals
-    if (lsu_ecl_sc_fin_ls1) begin
+    if (lsu_ecl_sc_fin_e) begin
         $display("[%0t] SC instruction finished at LS1", $time);
     end
-    if (lsu_csr_llb_set) begin
+    if (lsu_csr_llb_set_e) begin
         $display("[%0t] LLbit set by ll.w", $time);
     end
-    if (lsu_csr_llb_clr) begin
+    if (lsu_csr_llb_clr_e) begin
         $display("[%0t] LLbit cleared by sc.w success", $time);
     end
 end

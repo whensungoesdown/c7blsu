@@ -38,9 +38,9 @@ module c7blsu(
 
    output             lsu_ecl_wr_fin_ls3,
    // Exceptions: ale, bus error, ECC, tlb refill
-   // ALE is detected in E; the _ls1 port names are kept for the EXU
-   output             lsu_ecl_except_ale_ls1,
-   output [31:0]      lsu_ecl_except_ale_badv_ls1,
+   // ALE is detected in E, from the E-stage address
+   output             lsu_ecl_except_ale_e,
+   output [31:0]      lsu_ecl_except_ale_badv_e,
    output             lsu_ecl_except_buserr_ls3,
    output             lsu_ecl_except_ecc_ls3,
    output [31:0]      lsu_ecl_except_buserr_badv_ls3,
@@ -55,14 +55,15 @@ module c7blsu(
    output             lsu_except_pme_ls2,
    output [31:0]      lsu_except_pme_badv_ls2,
 
-   // ibar/dbar/sc finish in E (sc_fin keeps its _ls1 port name)
-   output             lsu_ecl_ibar_fin,
-   output             lsu_ecl_dbar_fin,
-   output             lsu_ecl_sc_fin_ls1,
+   // ibar/dbar/sc finish in E
+   output             lsu_ecl_ibar_fin_e,
+   output             lsu_ecl_dbar_fin_e,
+   output             lsu_ecl_sc_fin_e,
 
    output             lsu_sc,
-   output             lsu_csr_llb_set,
-   output             lsu_csr_llb_clr,
+   // LLBit set by LL.W / cleared by SC.W, in E
+   output             lsu_csr_llb_set_e,
+   output             lsu_csr_llb_clr_e,
 
    input              csr_lsu_llb,
 
@@ -316,12 +317,12 @@ module c7blsu(
 
    wire lsu_ale_e               = am_addr_align_exc || cm_addr_align_exc;
 
-   assign lsu_ecl_except_ale_ls1  = lsu_ale_e & lsu_valid_e;
-   assign lsu_ecl_except_ale_badv_ls1 = lsu_addr_e;
+   assign lsu_ecl_except_ale_e  = lsu_ale_e & lsu_valid_e;
+   assign lsu_ecl_except_ale_badv_e = lsu_addr_e;
 
 
-   assign lsu_ecl_ibar_fin = lsu_ibar_e & lsu_valid_e;
-   assign lsu_ecl_dbar_fin = lsu_dbar_e & lsu_valid_e;
+   assign lsu_ecl_ibar_fin_e = lsu_ibar_e & lsu_valid_e;
+   assign lsu_ecl_dbar_fin_e = lsu_dbar_e & lsu_valid_e;
 
 
 
@@ -637,9 +638,9 @@ module c7blsu(
 
 
    // ll.w sc.w
-   assign lsu_csr_llb_set = lsu_llw & lsu_valid_e;
-   assign lsu_csr_llb_clr = lsu_scw & lsu_valid_e & csr_lsu_llb;
-   assign lsu_ecl_sc_fin_ls1 = lsu_scw & lsu_valid_e & ~csr_lsu_llb;
+   assign lsu_csr_llb_set_e = lsu_llw & lsu_valid_e;
+   assign lsu_csr_llb_clr_e = lsu_scw & lsu_valid_e & csr_lsu_llb;
+   assign lsu_ecl_sc_fin_e = lsu_scw & lsu_valid_e & ~csr_lsu_llb;
 
 
    //
@@ -649,7 +650,9 @@ module c7blsu(
    // Stages (one request at a time, the core stalls until the LSU ends it):
    //
    //   E   : ecl_lsu_*_e pulse for one cycle. Address add, decode, ALE,
-   //         LLBit set/clear, sc_fin, ibar_fin, dbar_fin (all _e wires).
+   //         LLBit set/clear, sc_fin, ibar_fin, dbar_fin (all _e wires;
+   //         the outputs lsu_ecl_except_ale_e, lsu_ecl_*_fin_e and
+   //         lsu_csr_llb_*_e are valid in this cycle).
    //   LS1 : E registered. DTLB search with lsu_addr_ls1.
    //   LS2 : DTLB result, TLB exceptions, BIU request armed. The request
    //         (lsu_biu_*_req_ls2) is registered and held until the BIU ack.

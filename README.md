@@ -15,14 +15,14 @@ TLBRD and INVTLB for it.
                               |
                               v
   +-------------+   +----------------+   +---------+   +-------------+   +-----------+
-  | LS1         |-->| LS2 _ls2 regs  |-->| c7btlb  |-->| paddr mux   |-->| LS3       |
-  | addr, ALE,  |   | DA/DMW match,  |   | (DTLB)  |   | BIU rd / wr |   | extract,  |
-  | LL/SC, bar  |   | tlb_s_vld      |   | 1 cycle |   | req, lanes  |   | extend    |
+  | E (_e)      |-->| LS1 _ls1 regs  |-->| c7btlb  |-->| LS2 _ls2    |-->| LS3       |
+  | addr, ALE,  |   | DA/DMW match,  |   | (DTLB)  |   | paddr, BIU  |   | extract,  |
+  | LL/SC, bar  |   | tlb_s_vld_ls1  |   | 1 cycle |   | rd/wr req   |   | extend    |
   +-------------+   +----------------+   +---------+   +-------------+   +-----------+
         |                                     |                                |
         v                                     v                                v
   ALE, sc/ibar/dbar fin,          TLBR/PIL/PIS/PPI/PME             data_valid / wr_fin /
-  LLBit set/clr -> ECL/CSR        + badv -> ECL                    bus error -> ECL
+  LLBit set/clr -> ECL/CSR (_e)   + badv -> ECL (_ls2)             bus error -> ECL (_ls3)
 ```
 
 ## Files
@@ -39,25 +39,93 @@ included through `flist/sim.files`), the same module as the ITLB.
 
 ## Pipeline stages
 
-| Stage | Where | What happens |
-|---|---|---|
-| LS1 | cycle 0, `_ls1` wires | Same cycle as EXU E. All `_ls1` signals are wires from `ecl_lsu_*_e` (`c7blsu.v:630-634`). Address add, decode, ALE, LLBit set/clear, `sc_fin`, `ibar_fin`, `dbar_fin`. |
-| LS2 | cycle 1 .. ack, `_ls2` regs | `lsu_valid_ls2` pulses in cycle 1 (`c7blsu.v:665-669`), `lsu_valid_ls2_dly1` in cycle 2 (`c7blsu.v:672-676`). Address, op class, strobes and data are held in `_ls2` registers enabled by `lsu_valid_ls1`. DTLB search in cycle 1, result and TLB exceptions in cycle 2, BIU request high from cycle 3 until acknowledged. |
-| LS3 | ack+1 .. done, `_ls3` regs | `lsu_addr_ls3`, `lsu_shift_ls3`, `lsu_align_mode_ls3` are captured on `biu_lsu_rd_ack_ls2` (`c7blsu.v:767-814`). Load data, write completion and bus faults pass straight through from the BIU. |
+The suffix of every LSU signal names the stage in which it is valid:
 
-The stages are not a throughput pipeline. Each `_ls2`/`_ls3` register holds
-the single in-flight request while the core is stalled
-(`c7blsu.v:816-820`).
+```
+   E   : ecl_lsu_*_e pulse for one cycle. Address add, decode, ALE,
+         LLBit set/clear, sc_fin, ibar_fin, dbar_fin (all _e wires).
+   LS1 : E registered. DTLB search with lsu_addr_ls1.
+   LS2 : DTLB result, TLB exceptions, BIU request armed. The request
+         (lsu_biu_*_req_ls2) is registered and held until the BIU ack.
+   LS3 : BIU ack captures _ls2 into _ls3; read data / write finish.
+
+   Every stage register is enabled by the previous stage's valid (LS3 by
+   the BIU ack), so its value is held while the core is stalled.
+
+   ALE is detected in E and the request goes no further: lsu_valid_ls1
+   stays low, so no DTLB search and no BIU request follow.
+```
+
+Cycle 0 is the EXU E cycle in which `ecl_lsu_valid_e` is 1.
+
+### E (cycle 0): `_e` wires
+
+Combinational from the ECL inputs; there is no LSU register in this stage.
+
+- Address: `lsu_addr_e = ecl_lsu_base_e + ecl_lsu_offset_e`,
+  `lsu_shift_e = lsu_addr_e[2:0]`.
+- Decode of `ecl_lsu_op_e` into size classes, `lsu_load_e`,
+  `lsu_store_e`, `lsu_align_mode_e`, and the store data and strobes
+  `lsu_wdata_e` / `lsu_wstrb_e`.
+- ALE check on `lsu_addr_e`.
+- Operations that end in E, all outputs to the EXU or CSR in this cycle:
+
+| Output | Value | Used by |
+|---|---|---|
+| `lsu_ecl_except_ale_e` / `_badv_e` | `lsu_ale_e & lsu_valid_e`, `lsu_addr_e` | EXU `flush`, ECL `lsu_end`, registered to `lsu_except_ale_m` |
+| `lsu_ecl_ibar_fin_e` | `lsu_ibar_e & lsu_valid_e` | ECL `lsu_end` |
+| `lsu_ecl_dbar_fin_e` | `lsu_dbar_e & lsu_valid_e` | ECL `lsu_end` |
+| `lsu_ecl_sc_fin_e` | `SC.W & lsu_valid_e & ~llb` | ECL `lsu_end`, registered to `lsu_sc_fin_m` |
+| `lsu_csr_llb_set_e` | `LL.W & lsu_valid_e` | CSR LLBit |
+| `lsu_csr_llb_clr_e` | `SC.W & lsu_valid_e & llb` | CSR LLBit |
+
+Because these end in E, an ALE, IBAR, DBAR or failing SC.W does not stall
+the core.
+
+### LS1 (cycle 1): `_ls1` registers
+
+- `lsu_valid_ls1 <= lsu_valid_e & ~lsu_ale_e`. The E values are registered
+  with enable `lsu_valid_e`: `lsu_addr_ls1`, `lsu_shift_ls1`,
+  `lsu_load_ls1`, `lsu_store_ls1`, `lsu_wdata_ls1`, `lsu_wstrb_ls1`,
+  `lsu_align_mode_ls1`, and `lsu_scw_q` (`lsu_sc`).
+- DMW match on `lsu_addr_ls1[31:29]` (`match_dmw0_ls1`, `match_dmw1_ls1`).
+- DTLB search: `tlb_s_vld_ls1` for a load or store in PG mode without a DMW
+  hit, key `lsu_addr_ls1[31:12]` and `CSR.ASID`. The DTLB latches the key
+  at the end of the cycle.
+
+### LS2 (cycle 2 .. BIU ack): `_ls2` registers
+
+- `lsu_valid_ls2 <= lsu_valid_ls1`, and the LS1 values are registered with
+  enable `lsu_valid_ls1` (`lsu_addr_ls2`, `lsu_load_ls2`, ...).
+- `tlb_res_vld_ls2 <= tlb_s_vld_ls1` qualifies the DTLB result. The TLB
+  exceptions TLBR/PIL/PIS/PPI/PME are decided in cycle 2.
+- `lsu_paddr_ls2`: DA, DMW0, DMW1 or DTLB physical address.
+- `lsu_valid_ls2` arms the BIU request unless a TLB exception blocks it.
+  The request register drives `lsu_biu_rd_req_ls2` / `lsu_biu_wr_req_ls2`
+  from cycle 3 until the BIU acks. The `_ls2` values stay stable while
+  waiting because the core is stalled.
+
+### LS3 (BIU ack .. data / finish): `_ls3` registers
+
+- `lsu_addr_ls3`, `lsu_shift_ls3` and `lsu_align_mode_ls3` are captured on
+  `biu_lsu_rd_ack_ls2`.
+- Load data `biu_lsu_data_ls3` is extracted and extended combinationally
+  and returned with `lsu_ecl_data_valid_ls3`. A store ends with
+  `lsu_ecl_wr_fin_ls3` (B response). Bus faults end the access with
+  `lsu_ecl_except_buserr_ls3`.
+
+The stages are not a throughput pipeline: the core stalls until the LSU
+ends the access, so each register holds the single in-flight request.
 
 ## Address generation
 
-`lsu_addr_ls1 = ecl_lsu_base_e + ecl_lsu_offset_e` (`c7blsu.v:197`). In the
-EXU `base` is `rs1` (bypassed), `offset` is `rs2` for indexed forms
-(`lsu_double_read_e`) or the shifted immediate otherwise, and `wdata` is
-`rs2` (`c7bexu.v:469-471`). `lsu_shift_ls1 = addr[2:0]` is carried to LS2
-and LS3 for lane selection and extraction.
+`lsu_addr_e = ecl_lsu_base_e + ecl_lsu_offset_e`. In the EXU `base` is
+`rs1` (bypassed), `offset` is `rs2` for indexed forms (`lsu_double_read_e`)
+or the shifted immediate otherwise, and `wdata` is `rs2`. `lsu_shift_e =
+addr[2:0]` is carried to LS1, LS2 and LS3 for lane selection and
+extraction.
 
-Op decoding (`c7blsu.v:213-288`) groups opcodes into size classes:
+Op decoding groups opcodes into size classes:
 
 | Class | Opcodes |
 |---|---|
@@ -69,13 +137,12 @@ Op decoding (`c7blsu.v:213-288`) groups opcodes into size classes:
 | `lsu_ld` / `lsu_sd` | .D forms and all AM*.D |
 | LL/SC | LL.W, LL.D, SC.W, SC.D |
 
-`lsu_load_ls1` = any load class including LL. `lsu_store_ls1` = any store
-class, with SC.W/SC.D counted as a store only when `csr_lsu_llb` is 1
-(`c7blsu.v:285-288`).
+`lsu_load_e` = any load class including LL. `lsu_store_e` = any store
+class, with SC.W/SC.D counted as a store only when `csr_lsu_llb` is 1.
 
 ## Alignment check (ALE)
 
-Computed combinationally in LS1 (`c7blsu.v:305-315`):
+Computed combinationally in E:
 
 | Access | Condition for ALE |
 |---|---|
@@ -84,17 +151,16 @@ Computed combinationally in LS1 (`c7blsu.v:305-315`):
 | .H, .HU | `addr[0] != 0` |
 | byte, PRELD | never |
 
-`lsu_ecl_except_ale_ls1 = lsu_ale_ls1 & lsu_valid_ls1`, BADV is
-`lsu_addr_ls1` (virtual address). ALE gates the input of `lsu_valid_ls2`
-(`din = lsu_valid_ls1 & ~lsu_ale_ls1`), so no translation and no BIU
-request follow. The EXU puts `lsu_except_ale_ls1` into `flush` directly and
+`lsu_ecl_except_ale_e = lsu_ale_e & lsu_valid_e`, BADV is `lsu_addr_e`
+(virtual address). ALE gates the input of `lsu_valid_ls1`
+(`din = lsu_valid_e & ~lsu_ale_e`), so no translation and no BIU request
+follow. The EXU puts `lsu_except_ale_e` into `flush` directly and
 registers it to `lsu_except_ale_m`, which merges into the M-stage exception
-(`c7bexu.v:966, 1100, 1326-1336`).
+(`c7bexu.v`).
 
 ## Address translation
 
-`lsu_paddr_ls2` (in `c7blsu.v:384-387`) selects the physical address from
-`lsu_addr_ls2`:
+`lsu_paddr_ls2` selects the physical address from `lsu_addr_ls2`:
 
 | Mode | Condition | Physical address |
 |---|---|---|
@@ -103,56 +169,57 @@ registers it to `lsu_except_ale_m`, which merges into the M-stage exception
 | DMW1 | not DA, no DMW0 hit, `addr[31:29] == dmw1_vseg` | `{dmw1_pseg, addr[28:0]}` |
 | DTLB | not DA, no DMW hit | `{tlb_s_pfn, addr[11:0]}` |
 
-DMW0 has priority over DMW1. The DTLB is searched only when
+DMW0 has priority over DMW1. The DTLB is searched in LS1 only when
 
 ```verilog
-tlb_s_vld = lsu_valid_ls2 & (lsu_load_ls2 | lsu_store_ls2) & pg_mode & ~(match_dmw0_ls2 | match_dmw1_ls2);
+tlb_s_vld_ls1 = lsu_valid_ls1 & (lsu_load_ls1 | lsu_store_ls1) & pg_mode & ~(match_dmw0_ls1 | match_dmw1_ls1);
 // pg_mode = ~DA & PG
-// key: vppn = addr_ls2[31:13], odd_page = addr_ls2[12], asid = CSR.ASID.ASID
+// key: vppn = addr_ls1[31:13], odd_page = addr_ls1[12], asid = CSR.ASID.ASID
 ```
 
-DTLB match (`c7btlb.v:244-247`): `vppn` equal, (`asid` equal or `G`), and
-`E`. The lowest matching index wins (`enc32`). The odd/even page selects V,
-D, MAT, PLV and PPN.
+DTLB match (`c7btlb.v`): `vppn` equal, (`asid` equal or `G`), and `E`. The
+lowest matching index wins (`enc32`). The odd/even page selects V, D, MAT,
+PLV and PPN.
 
 ### DTLB timing
 
 `c7btlb` takes **one cycle** per search. The search inputs are latched into
 `s_vppn_g`, `s_odd_page_g`, `s_asid_g`, `s_vld_g`, and `s_found` / `s_v` /
-`s_d` / `s_plv` / `s_pfn` are combinational from the latched values
-(`c7btlb.v:140-275`). The LSU keeps a matching flag
-`tlb_res_vld_ls2 <= tlb_s_vld` (`c7blsu.v:830-834`) to qualify the result.
+`s_d` / `s_plv` / `s_pfn` are combinational from the latched values. The LSU
+keeps a matching flag `tlb_res_vld_ls2 <= tlb_s_vld_ls1` to qualify the
+result.
 
 ```
-cycle           1 (lsu_valid_ls2)   2 (lsu_valid_ls2_dly1)
-tlb_s_vld       1                   0
-s_vppn          addr_ls2[31:13]     x
-tlb_res_vld_ls2 0                   1
-s_found         -                   result for addr_ls2
+cycle            1 (LS1)            2 (LS2)
+lsu_valid_ls1    1                  0
+lsu_valid_ls2    0                  1
+tlb_s_vld_ls1    1                  0
+s_vppn           addr_ls1[31:13]    x
+tlb_res_vld_ls2  0                  1
+s_found          -                  result for addr_ls1 (= addr_ls2)
 ```
 
 Because the search inputs are only reloaded when `s_vld` is high, `s_pfn`
 stays stable while the request waits for the BIU.
 
-To line up with this latency the BIU request is armed from
-`lsu_valid_ls2_dly1` (cycle 2), not `lsu_valid_ls2`, for every mode,
-including DA and DMW hits that do not use the DTLB (`c7blsu.v:525, 559`).
-The request register drives the BIU from cycle 3.
+The BIU request is armed from `lsu_valid_ls2` (cycle 2) for every mode,
+including DA and DMW hits that do not use the DTLB. The request register
+drives the BIU from cycle 3.
 
 ## BIU request
 
 ### Signals
 
 ```verilog
-// read (c7blsu.v:525-539)
+// read
 biu_rd_req_in = ~(biu_lsu_rd_ack_ls2 | tlbr | pil | ppi)
-                & ((lsu_valid_ls2_dly1 & lsu_load_ls2) | biu_rd_req_q);
+                & ((lsu_valid_ls2 & lsu_load_ls2) | biu_rd_req_q);
 lsu_biu_rd_req_ls2  = biu_rd_req_q;
 lsu_biu_rd_addr_ls2 = lsu_paddr_ls2;
 
-// write (c7blsu.v:559-580)
+// write
 biu_wr_req_in = ~(biu_lsu_wr_ack_ls2 | tlbr | pis | ppi | pme)
-                & ((lsu_valid_ls2_dly1 & lsu_store_ls2) | biu_wr_req_q);
+                & ((lsu_valid_ls2 & lsu_store_ls2) | biu_wr_req_q);
 lsu_biu_wr_req_ls2  = biu_wr_req_q;
 lsu_biu_wr_addr_ls2 = lsu_paddr_ls2;
 lsu_biu_wr_data_ls2 = paddr[2] ? {wdata_ls2, 32'b0} : {32'b0, wdata_ls2};
@@ -162,7 +229,7 @@ lsu_ecl_wr_fin_ls3 = biu_lsu_wr_fin_ls3;
 ```
 
 The request is a registered level held until the ack cycle and drops the
-cycle after (option 2 in the source comment, `c7blsu.v:476-506`).
+cycle after (option 2 in the source comment).
 
 In the top level (`c7b.v:172-177, 282-290`) the single LSU write request
 drives both the BIU AW and W requests, `last` is 1, and `biu_lsu_wr_ack` is
@@ -180,8 +247,8 @@ pulses, `A` is the BIU ack cycle (A >= 3) and `D` the data/finish cycle
 ```
 cycle                   0     1     2     3 .. A      A+1 .. D-1   D
 ecl_lsu_valid_e         1     0     0     0           0            0
-lsu_valid_ls2           0     1     0     0           0            0
-lsu_valid_ls2_dly1      0     0     1     0           0            0
+lsu_valid_ls1           0     1     0     0           0            0
+lsu_valid_ls2           0     0     1     0           0            0
 biu_rd_req_in           0     0     1     1 (0 in A)  0            0
 lsu_biu_rd_req_ls2      0     0     0     1           0            0
 biu_lsu_rd_ack_ls2      0     0     0     1 in A      0            0
@@ -190,19 +257,21 @@ lsu_ecl_data_valid_ls3  0     0     0     0           0            1
 ECL stall               1     1     1     1           1            ends
 ```
 
-- 0: address add and ALE check; `_ls2` registers load.
-- 2: `lsu_valid_ls2_dly1` sets `biu_rd_req_in`.
+- 0: address add and ALE check; the `_ls1` registers load at the end of
+  the cycle.
+- 1: the `_ls2` registers load.
+- 2: `lsu_valid_ls2` sets `biu_rd_req_in`.
 - 3 .. A: request held until the BIU acks; `_ls3` registers load in A.
 - D: `biu_lsu_data_valid_ls3`; data is extracted combinationally and
-  written into `rd_data_m` (`c7bexu.v:924`).
+  written into `rd_data_m` (`c7bexu.v`).
 
 ### Timeline: store (BIU AW/W/B)
 
 ```
 cycle                   0     1     2     3 .. A      A+1 .. D-1   D
 ecl_lsu_valid_e         1     0     0     0           0            0
-lsu_valid_ls2           0     1     0     0           0            0
-lsu_valid_ls2_dly1      0     0     1     0           0            0
+lsu_valid_ls1           0     1     0     0           0            0
+lsu_valid_ls2           0     0     1     0           0            0
 lsu_biu_wr_req_ls2      0     0     0     1           0            0
 wr_addr/data/strb       -     -     -     paddr, lane by paddr[2]
 biu_lsu_wr_ack_ls2      0     0     0     1 in A      0            0
@@ -210,7 +279,7 @@ biu_lsu_wr_fin_ls3 (B)  0     0     0     0           0            1
 lsu_ecl_wr_fin_ls3      0     0     0     0           0            1
 ```
 
-- 0: strobes and data replicated (see Store data), `_ls2` registers load.
+- 0: strobes and data replicated (see Store data), `_ls1` registers load.
 - 3 .. A: AW and W requests driven together; ack is the AW ack.
 - D: B response, `lsu_ecl_wr_fin_ls3` ends the ECL stall.
 
@@ -218,8 +287,8 @@ lsu_ecl_wr_fin_ls3      0     0     0     0           0            1
 
 ```
 cycle                   0     1        2                 3 .. A    D
-lsu_valid_ls2           0     1        0                 0         0
-tlb_s_vld               0     1        0                 0         0
+lsu_valid_ls1           0     1        0                 0         0
+tlb_s_vld_ls1           0     1        0                 0         0
 tlb_res_vld_ls2/s_vld_g 0     0        1                 0         0
 tlb_s_found, s_v        -     -        1, 1              -         -
 lsu_paddr_ls2           -     -        {pfn,addr[11:0]}  same      -
@@ -228,20 +297,20 @@ lsu_biu_rd_req_ls2      0     0        0                 1         0
 lsu_ecl_data_valid_ls3  0     0        0                 0         1
 ```
 
-- 1: DTLB latches the key at the end of the cycle.
+- 1: DTLB latches the key from `lsu_addr_ls1` at the end of the cycle.
 - 2: result valid, no exception, request input set.
 
 The DA/DMW and DTLB paths have the same timing; the DTLB lookup is hidden
-by the `lsu_valid_ls2_dly1` cycle.
+by the LS1 cycle.
 
 ## Load data extraction
 
 The BIU returns 64 bits. LS3 selects `data[63:32]` when `lsu_addr_ls3[2]`
-is 1, else `data[31:0]` (`c7blsu.v:587-589`). Using the virtual address bit
-is valid because bit 2 is part of the page offset in every translation mode.
+is 1, else `data[31:0]`. Using the virtual address bit is valid because
+bit 2 is part of the page offset in every translation mode.
 
-`lsu_align_mode` (`c7blsu.v:596-600`): bit0 = 64-bit, bit1 = word,
-bit2 = half, bit3 = byte, bit4 = unsigned; all zero for SC.
+`lsu_align_mode`: bit0 = 64-bit, bit1 = word, bit2 = half, bit3 = byte,
+bit4 = unsigned; all zero for SC.
 
 | Access | `shift[1:0]` | Result |
 |---|---|---|
@@ -251,11 +320,11 @@ bit2 = half, bit3 = byte, bit4 = unsigned; all zero for SC.
 | none of byte/half/word set | - | `32'h1` |
 
 `lsu_ecl_data_valid_ls3 = biu_lsu_data_valid_ls3` and the result is driven
-combinationally in the same cycle (`c7blsu.v:621-622`).
+combinationally in the same cycle.
 
 ## Store data and byte strobes
 
-Built in LS1 (`c7blsu.v:294-300`) and registered into `_ls2`:
+Built in E and registered into `_ls1`, then `_ls2`:
 
 | Access | `wstrb[3:0]` | `wdata[31:0]` |
 |---|---|---|
@@ -264,27 +333,26 @@ Built in LS1 (`c7blsu.v:294-300`) and registered into `_ls2`:
 | B | `0001 << shift[1:0]` | `{4{rs2[7:0]}}` |
 | others (.D, SC.D) | `0000` | `0` |
 
-In LS2 they are placed in the 64-bit bus lane by `lsu_paddr_ls2[2]`
-(`c7blsu.v:578-580`, see BIU request).
+In LS2 they are placed in the 64-bit bus lane by `lsu_paddr_ls2[2]` (see
+BIU request).
 
 ## Exceptions
 
 | Exception | Detected | Condition | Request sent | BADV | EXU code |
 |---|---|---|---|---|---|
-| ALE | LS1 (cycle 0) | see alignment table | no | `lsu_addr_ls1` | 0x09 |
+| ALE | E (cycle 0) | see alignment table | no | `lsu_addr_e` | 0x09 |
 | TLBR | LS2 (cycle 2) | `tlb_res_vld_ls2 & ~found` | no | `lsu_addr_ls2` | 0x3F |
 | PIL | LS2 (cycle 2) | found, `~V`, load | no | `lsu_addr_ls2` | 0x01 |
 | PIS | LS2 (cycle 2) | found, `~V`, store | no | `lsu_addr_ls2` | 0x02 |
 | PPI | LS2 (cycle 2) | found, `V`, `CRMD.PLV > page PLV` | no | `lsu_addr_ls2` | 0x07 |
 | PME | LS2 (cycle 2) | found, `V`, `~D`, store | no | `lsu_addr_ls2` | 0x04 |
 | ADEM (bus error) | LS3 | `biu_lsu_fault_ls3 \| biu_lsu_wr_fault_ls3` | yes | read: `lsu_addr_ls3`, write: `lsu_addr_ls2` | 0x08, subcode 1 |
-| ECC | - | tied to 0 (`c7blsu.v:844`) | - | - | - |
+| ECC | - | tied to 0 | - | - | - |
 
 All BADV values are virtual addresses. TLB exceptions only exist in the
 cycle where `tlb_res_vld_ls2` is high, and they clear the BIU request input
-in that cycle (`c7blsu.v:525, 559`): TLBR/PIL/PPI block a read,
-TLBR/PIS/PPI/PME block a write. Because the request register was never set,
-no bus access is made.
+in that cycle: TLBR/PIL/PPI block a read, TLBR/PIS/PPI/PME block a write.
+Because the request register was never set, no bus access is made.
 
 The EXU merges the LSU exceptions into the M-stage exception in this
 priority (`c7bexu.v:1100-1143`): bus error > ALE > TLBR > PIL > PIS > PPI >
@@ -296,15 +364,15 @@ ends the LSU stall on `exc_vld_w` (`c7bexu.v:983`).
 ### Timeline: load with TLB refill exception
 
 ```
-cycle                   0     1     2           3     4
-lsu_valid_ls2/tlb_s_vld 0     1     0           0     0
-tlb_res_vld_ls2         0     0     1           0     0
-tlb_s_found             -     -     0           -     -
-lsu_ecl_except_tlbr_ls2 0     0     1           0     0
-biu_rd_req_in           0     0     0 (blocked) 0     0
-lsu_biu_rd_req_ls2      0     0     0           0     0
-EXU exc_vld_merge_m     0     0     1 (0x3F)    0     0
-EXU exc_vld_w           0     0     0           1     0
+cycle                       0     1     2           3     4
+lsu_valid_ls1/tlb_s_vld_ls1 0     1     0           0     0
+tlb_res_vld_ls2             0     0     1           0     0
+tlb_s_found                 -     -     0           -     -
+lsu_ecl_except_tlbr_ls2     0     0     1           0     0
+biu_rd_req_in               0     0     0 (blocked) 0     0
+lsu_biu_rd_req_ls2          0     0     0           0     0
+EXU exc_vld_merge_m         0     0     1 (0x3F)    0     0
+EXU exc_vld_w               0     0     0           1     0
 ```
 
 - 2: TLBR with BADV `lsu_addr_ls2`; the request input is blocked.
@@ -317,45 +385,44 @@ PIL/PIS/PPI/PME follow the same timing with their own codes.
 ```
 cycle                    0     1     2
 ecl_lsu_valid_e          1     0     0
-lsu_ecl_except_ale_ls1   1     0     0
+lsu_ecl_except_ale_e     1     0     0
 EXU flush                1     -     1 (exc_vld_w)
 ECL lsu_end              1     0     0
-lsu_valid_ls2            0     0     0
+lsu_valid_ls1            0     0     0
 BIU request              -     none  none
 EXU lsu_except_ale_m     0     1     0
 EXU exc_vld_w            0     0     1
 ```
 
-- 0: ALE with BADV `lsu_addr_ls1`; `flush` and `lsu_end` in the same cycle,
-  so there is no stall; `lsu_valid_ls2` is killed.
+- 0: ALE with BADV `lsu_addr_e`; `flush` and `lsu_end` in the same cycle,
+  so there is no stall; `lsu_valid_ls1` is not set.
 - 1: `lsu_except_ale_m` (code 0x09) merges into the M-stage exception.
 
 ## LL/SC and LLBit
 
-All in LS1 (`c7blsu.v:638-640`); the CSR holds LLBit:
+All in E; the CSR holds LLBit:
 
 | Signal | Value |
 |---|---|
-| `lsu_csr_llb_set` | `LL.W & valid_ls1` |
-| `lsu_csr_llb_clr` | `SC.W & valid_ls1 & llb` |
-| `lsu_ecl_sc_fin_ls1` | `SC.W & valid_ls1 & ~llb` |
-| `lsu_sc` | `lsu_scw_q`, registered `SC.W & llb` on `valid_ls1` (`c7blsu.v:822-837`) |
+| `lsu_csr_llb_set_e` | `LL.W & lsu_valid_e` |
+| `lsu_csr_llb_clr_e` | `SC.W & lsu_valid_e & llb` |
+| `lsu_ecl_sc_fin_e` | `SC.W & lsu_valid_e & ~llb` |
+| `lsu_sc` | `lsu_scw_q`, registered `SC.W & llb` on `lsu_valid_e` |
 
 LL.W is a normal word load. SC.W with LLBit = 0 is not a store
-(`lsu_store_ls1` = 0); `sc_fin` ends the ECL stall in LS1 and the EXU
-writes `rd = 0` one cycle later through `lsu_sc_fin_m`
-(`c7bexu.v:930, 1339-1342`). SC.W with LLBit = 1 clears LLBit in LS1,
-performs the store, and the EXU writes `rd = 1` when
-`lsu_wr_fin_ls3 & lsu_sc` (`c7bexu.v:931`).
+(`lsu_store_e` = 0); `lsu_ecl_sc_fin_e` ends the ECL stall in E and the
+EXU writes `rd = 0` one cycle later through `lsu_sc_fin_m` (`c7bexu.v`).
+SC.W with LLBit = 1 clears LLBit in E, performs the store, and the EXU
+writes `rd = 1` when `lsu_wr_fin_ls3 & lsu_sc`.
 
 ### Timeline: SC.W, LLBit = 0
 
 ```
 cycle                    0     1     2
-lsu_ecl_sc_fin_ls1       1     0     0
-lsu_store_ls1            0     -     -
+lsu_ecl_sc_fin_e         1     0     0
+lsu_store_e              0     -     -
 ECL stall                none
-lsu_valid_ls2            0     1     0     (load/store = 0, no request)
+lsu_valid_ls1            0     1     0     (load/store = 0, no request)
 EXU lsu_sc_fin_m         0     1     0     (rd_data_m = 0)
 ```
 
@@ -363,7 +430,7 @@ EXU lsu_sc_fin_m         0     1     0     (rd_data_m = 0)
 
 ```
 cycle                    0     1     2     3 .. A   D
-lsu_csr_llb_clr          1     0     0     0        0
+lsu_csr_llb_clr_e        1     0     0     0        0
 lsu_sc (lsu_scw_q)       0     1     1     1        1
 lsu_biu_wr_req_ls2       0     0     0     1        0     (strb 1111)
 lsu_ecl_wr_fin_ls3       0     0     0     0        1
@@ -372,11 +439,11 @@ EXU rd_data_m = 1        -     -     -     -        1
 
 ## IBAR / DBAR
 
-`lsu_ecl_ibar_fin = ecl_lsu_ibar_e & valid_ls1` and
-`lsu_ecl_dbar_fin = ecl_lsu_dbar_e & valid_ls1` (`c7blsu.v:318-319`). Both
-complete in LS1. They are neither loads nor stores, so no DTLB search and
-no BIU request follow. Since there is a single outstanding access and no
-store buffer, no draining is needed.
+`lsu_ecl_ibar_fin_e = ecl_lsu_ibar_e & lsu_valid_e` and
+`lsu_ecl_dbar_fin_e = ecl_lsu_dbar_e & lsu_valid_e`. Both complete in E.
+They are neither loads nor stores, so no DTLB search and no BIU request
+follow. Since there is a single outstanding access and no store buffer, no
+draining is needed.
 
 ## DTLB maintenance (TLBSRCH, TLBWR/TLBFILL, TLBRD, INVTLB)
 
@@ -385,60 +452,56 @@ The CSR bit `TLBIDX.I_D` (bit 16, `c7bcsr.v:627`) selects the target TLB:
 
 | Operation | DTLB connection |
 |---|---|
-| TLBSRCH | `s_vld = tlb_s_vld \| exu_dtlb_tlbsrch_vld_e`; while `tlbsrch_vld_e` is high the key is `CSR.TLBEHI.VPPN` and `CSR.ASID` (`c7blsu.v:411-416`). Result is read one cycle later: `dtlb_csr_tlbidx_e = tlbsrch_vld_m ? s_found : r_e`, `dtlb_csr_tlbidx_index = s_index` (`c7blsu.v:396-399`). The ECL stalls the IFU during the TLB op's E cycle so TLBSRCH owns the search port (`c7bexu.v:996`, `c7bexu_ecl.v:115`). A TLBSRCH does not set `tlb_res_vld_ls2`, so it raises no LSU exception. |
-| TLBWR / TLBFILL | `we = (tlbfill_vld_e \| tlbwr_vld_e) & I_D`; index = `TLBIDX.INDEX` (TLBWR) or `exu_dtlb_random_index` (TLBFILL); `w_e = tlbrefill_ctx ? 1 : ~TLBIDX.NE`; `w_g = TLBELO0.G & TLBELO1.G` (`c7blsu.v:389-394, 426-442`). |
+| TLBSRCH | `s_vld = tlb_s_vld_ls1 \| exu_dtlb_tlbsrch_vld_e`; while `tlbsrch_vld_e` is high the key is `CSR.TLBEHI.VPPN` and `CSR.ASID`. Result is read one cycle later: `dtlb_csr_tlbidx_e = tlbsrch_vld_m ? s_found : r_e`, `dtlb_csr_tlbidx_index = s_index`. The ECL stalls the IFU during the TLB op's E cycle so TLBSRCH owns the search port (`c7bexu.v:996`, `c7bexu_ecl.v:115`). A TLBSRCH does not set `tlb_res_vld_ls2`, so it raises no LSU exception. |
+| TLBWR / TLBFILL | `we = (tlbfill_vld_e \| tlbwr_vld_e) & I_D`; index = `TLBIDX.INDEX` (TLBWR) or `exu_dtlb_random_index` (TLBFILL); `w_e = tlbrefill_ctx ? 1 : ~TLBIDX.NE`; `w_g = TLBELO0.G & TLBELO1.G`. |
 | TLBRD | Read port indexed by `TLBIDX.INDEX`, outputs go to CSR (`dtlb_csr_*`). |
 | INVTLB | `inv_en = invtlb_vld_e`, independent of `I_D` (the ITLB is invalidated by the same INVTLB); op = `rd`, asid = `rs1[9:0]`, vppn = `rs2[31:13]` (`c7bexu.v:907-910`). Ops 0-6 clear `E` per op; other ops do nothing. INVTLB has priority over a write in the same cycle (`c7btlb.v:159-225`). |
 
 ## Notes / limitations
 
 - No data cache and no store buffer (the STB ports are commented out);
-  every access is an uncached single BIU transaction
-  (`c7blsu.v:14-16, 65-83`). Only one access is outstanding; the core
-  stalls until it completes (`c7blsu.v:765, 816-820`).
-- The BIU request is always armed from `lsu_valid_ls2_dly1`, so the first
+  every access is an uncached single BIU transaction. Only one access is
+  outstanding; the core stalls until it completes.
+- The BIU request is always armed from `lsu_valid_ls2`, so the first
   request cycle is cycle 3 even for DA and DMW accesses that need no DTLB
-  lookup (`c7blsu.v:525, 559`).
-- DMW match compares only `VSEG` (`c7blsu.v:377-378`); the DMW PLV0/PLV3
-  enable bits are not inputs, so a DMW window matches in any privilege
-  level, including user mode accessing a kernel window. DMW MAT is not used.
-- DA mode masks the address with `0x1FFFFFFF` (`c7blsu.v:384`) instead of
-  using VA as PA.
+  lookup.
+- DMW match compares only `VSEG`; the DMW PLV0/PLV3 enable bits are not
+  inputs, so a DMW window matches in any privilege level, including user
+  mode accessing a kernel window. DMW MAT is not used.
+- DA mode masks the address with `0x1FFFFFFF` instead of using VA as PA.
 - With DA = 0 and PG = 0 the address goes through the DMW/DTLB mux but no
-  DTLB search is made, so a non-DMW address uses a stale `tlb_s_pfn`
-  (`c7blsu.v:175, 362, 387`).
+  DTLB search is made, so a non-DMW address uses a stale `tlb_s_pfn`.
 - DTLB `MAT` is not used (`tlb_s_mat` unconnected beyond the port); all
   accesses look the same to the BIU.
 - DTLB matching ignores the page size `PS`; only 19-bit VPPN with 4 KB
-  odd/even pages is matched (`c7btlb.v:244-247`).
+  odd/even pages is matched (`c7btlb.v`).
 - PPI is checked for loads and stores, and is evaluated before PME in the
-  EXU priority (`c7blsu.v:354`, `c7bexu.v:1116-1117`).
+  EXU priority (`c7bexu.v:1116-1117`).
 - The EXU sets exception subcode 1 for all TLB-related exceptions, not only
   for ADEM (`c7bexu.v:1127`).
-- `lsu_csr_llb_set` (LL.W) and `lsu_csr_llb_clr` (SC.W) are not gated by
-  ALE, and the SC.W clear happens in LS1 before the store's TLB check and
-  bus completion (`c7blsu.v:638-640`). A misaligned SC.W with LLBit = 0
-  asserts both `sc_fin` and ALE.
+- `lsu_csr_llb_set_e` (LL.W) and `lsu_csr_llb_clr_e` (SC.W) are not gated
+  by ALE, and the SC.W clear happens in E before the store's TLB check and
+  bus completion. A misaligned SC.W with LLBit = 0 asserts both
+  `lsu_ecl_sc_fin_e` and ALE.
 - LL.D/SC.D and .D accesses are decoded, but store strobes/data are only
   generated for W/H/B, so `lsu_sd`/SC.D writes have strobe `0`; .D loads
-  return `32'h1` from the default extraction term (`c7blsu.v:294-300, 619`).
+  return `32'h1` from the default extraction term.
 - AM* opcodes are decoded as plain stores (`lsu_sw` / `lsu_sd`), with no
-  read-modify-write (`c7blsu.v:261-272`).
+  read-modify-write.
 - LDGT/LDLE/STGT/STLE are treated as plain loads/stores; the bound check is
-  commented out (`c7blsu.v:275-278`).
+  commented out.
 - PRELD/PRELDX are decoded by the LSU as `lsu_lb` and would issue a real
-  BIU read (`c7blsu.v:263-264`). In the core they do not reach the LSU: the
-  IFU decoder removed them from `lsu_related`, so they execute as NOPs
+  BIU read. In the core they do not reach the LSU: the IFU decoder removed
+  them from `lsu_related`, so they execute as NOPs
   (`c7bifu/rtl/decoder.v:510-514`, commit 1b41723).
 - IOCSR ops go through the same address translation and BIU path as memory
-  accesses (`c7blsu.v:259-271`).
+  accesses.
 - `lsu_ecl_except_ecc_ls3` is tied to 0, and `biu_lsu_fault_code_ls3` /
-  `biu_lsu_wr_fault_code_ls3` are unused (`c7blsu.v:844`).
+  `biu_lsu_wr_fault_code_ls3` are unused.
 - The `_ls3` registers are enabled only by `biu_lsu_rd_ack_ls2`; the write
-  bus-error BADV uses `lsu_addr_ls2` (`c7blsu.v:840`).
-- In the TLBSRCH path `s_odd_page` still comes from `lsu_addr_ls2[12]`
-  (`c7blsu.v:414`); it only affects the page-select outputs, not `found` or
-  `index`.
+  bus-error BADV uses `lsu_addr_ls2`.
+- In the TLBSRCH path `s_odd_page` still comes from `lsu_addr_ls1[12]`; it
+  only affects the page-select outputs, not `found` or `index`.
 - Top-level integration: `biu_lsu_wr_ack` is wired to
   `biu_lsu_wr_aw_ack & biu_lsu_wr_aw_ack`, so the W-channel ack is not used
   (`c7b.v:177`).
@@ -456,12 +519,13 @@ The CSR bit `TLBIDX.I_D` (bit 16, `c7bcsr.v:627`) selects the target TLB:
 | `ecl_lsu_base_e` / `_offset_e` / `_wdata_e` [31:0] | in | rs1, rs2 or imm, store data |
 | `lsu_ecl_data_valid_ls3` / `lsu_ecl_data_ls3[31:0]` | out | Load data |
 | `lsu_ecl_wr_fin_ls3` | out | Store complete |
-| `lsu_ecl_ibar_fin` / `lsu_ecl_dbar_fin` / `lsu_ecl_sc_fin_ls1` | out | Completion in LS1 |
-| `lsu_ecl_except_ale_ls1` / `_badv_ls1` | out | ALE |
+| `lsu_ecl_ibar_fin_e` / `lsu_ecl_dbar_fin_e` / `lsu_ecl_sc_fin_e` | out | Completion in E |
+| `lsu_ecl_except_ale_e` / `lsu_ecl_except_ale_badv_e` | out | ALE, in E |
 | `lsu_ecl_except_tlbr_ls2`, `lsu_except_{pil,pis,ppi,pme}_ls2` and `_badv_ls2` | out | TLB exceptions |
 | `lsu_ecl_except_buserr_ls3` / `_badv_ls3` | out | Bus error (ADEM) |
 | `lsu_ecl_except_ecc_ls3` | out | Tied 0 |
-| `lsu_sc` / `lsu_csr_llb_set` / `lsu_csr_llb_clr` | out | SC in progress, LLBit set/clear |
+| `lsu_sc` | out | SC.W with LLBit = 1 in progress (from LS1) |
+| `lsu_csr_llb_set_e` / `lsu_csr_llb_clr_e` | out | LLBit set / clear, in E |
 | `csr_lsu_llb` | in | Current LLBit |
 | `lsu_biu_rd_req_ls2` / `lsu_biu_rd_addr_ls2[31:0]` | out | Read request, physical address |
 | `biu_lsu_rd_ack_ls2` | in | Read request accepted |

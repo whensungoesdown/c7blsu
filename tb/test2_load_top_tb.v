@@ -20,7 +20,7 @@ reg [31:0] ecl_lsu_wdata_e;
 wire lsu_ecl_data_valid_ls3;
 wire [31:0] lsu_ecl_data_ls3;
 wire lsu_ecl_wr_fin_ls3;
-wire lsu_ecl_except_ale_ls1;
+wire lsu_ecl_except_ale_e;
 wire [31:0] lsu_ecl_except_badv_ls1;
 wire lsu_ecl_except_buserr_ls3;
 wire lsu_ecl_except_ecc_ls3;
@@ -41,13 +41,13 @@ wire lsu_except_pme_ls2;
 wire [31:0] lsu_except_pme_badv_ls2;
 
 // ibar/dbar finish outputs
-wire lsu_ecl_ibar_fin;
-wire lsu_ecl_dbar_fin;
+wire lsu_ecl_ibar_fin_e;
+wire lsu_ecl_dbar_fin_e;
 
 // New LL/SC ports
-wire lsu_ecl_sc_fin_ls1;        // SC finish at LS1
-wire lsu_csr_llb_set;           // Set LLbit from LSU (for ll.w)
-wire lsu_csr_llb_clr;           // Clear LLbit from LSU (for sc.w success)
+wire lsu_ecl_sc_fin_e;        // SC finish at LS1
+wire lsu_csr_llb_set_e;           // Set LLbit from LSU (for ll.w)
+wire lsu_csr_llb_clr_e;           // Clear LLbit from LSU (for sc.w success)
 reg  csr_lsu_llb;               // Current LLbit value from CSR (driven by test)
 
 // CSR/DMW inputs (fixed for test)
@@ -156,8 +156,8 @@ c7blsu dut (
     .lsu_ecl_data_valid_ls3(lsu_ecl_data_valid_ls3),
     .lsu_ecl_data_ls3(lsu_ecl_data_ls3),
     .lsu_ecl_wr_fin_ls3(lsu_ecl_wr_fin_ls3),
-    .lsu_ecl_except_ale_ls1(lsu_ecl_except_ale_ls1),
-    .lsu_ecl_except_ale_badv_ls1(lsu_ecl_except_badv_ls1),
+    .lsu_ecl_except_ale_e(lsu_ecl_except_ale_e),
+    .lsu_ecl_except_ale_badv_e(lsu_ecl_except_badv_ls1),
     .lsu_ecl_except_buserr_ls3(lsu_ecl_except_buserr_ls3),
     .lsu_ecl_except_ecc_ls3(lsu_ecl_except_ecc_ls3),
     .lsu_ecl_except_buserr_badv_ls3(lsu_ecl_except_buserr_badv_ls3),
@@ -174,11 +174,11 @@ c7blsu dut (
     .lsu_except_pme_ls2(lsu_except_pme_ls2),
     .lsu_except_pme_badv_ls2(lsu_except_pme_badv_ls2),
     
-    .lsu_ecl_ibar_fin(lsu_ecl_ibar_fin),
-    .lsu_ecl_dbar_fin(lsu_ecl_dbar_fin),
-    .lsu_ecl_sc_fin_ls1(lsu_ecl_sc_fin_ls1),
-    .lsu_csr_llb_set(lsu_csr_llb_set),
-    .lsu_csr_llb_clr(lsu_csr_llb_clr),
+    .lsu_ecl_ibar_fin_e(lsu_ecl_ibar_fin_e),
+    .lsu_ecl_dbar_fin_e(lsu_ecl_dbar_fin_e),
+    .lsu_ecl_sc_fin_e(lsu_ecl_sc_fin_e),
+    .lsu_csr_llb_set_e(lsu_csr_llb_set_e),
+    .lsu_csr_llb_clr_e(lsu_csr_llb_clr_e),
     .csr_lsu_llb(csr_lsu_llb),
     
     // CSR/DMW inputs (fixed)
@@ -457,7 +457,7 @@ begin
     ecl_lsu_valid_e = 0;
     
     // Check ALE in LS1 stage
-    if (lsu_ecl_except_ale_ls1) begin
+    if (lsu_ecl_except_ale_e) begin
         $display("Test %0d PASSED: ALE exception triggered", test_num);
         $display("Bad address: 0x%h", lsu_ecl_except_badv_ls1);
         if (lsu_ecl_except_badv_ls1 === 32'h1001) begin
@@ -1016,7 +1016,7 @@ begin
     @(posedge clk);
     ecl_lsu_valid_e = 0;
     
-    if (lsu_ecl_except_ale_ls1) begin
+    if (lsu_ecl_except_ale_e) begin
         $display("Test %0d PASSED: ALE exception triggered for unaligned halfword", test_num);
         $display("Bad address: 0x%h", lsu_ecl_except_badv_ls1);
         if (lsu_ecl_except_badv_ls1 === 32'hC001) begin
@@ -1154,7 +1154,7 @@ always @(posedge clk) begin
                  $time, lsu_ecl_data_ls3);
     end
     
-    if (lsu_ecl_except_ale_ls1) begin
+    if (lsu_ecl_except_ale_e) begin
         $display("[%0t] ALE Exception Triggered, BadAddr=0x%h", 
                  $time, lsu_ecl_except_badv_ls1);
     end
